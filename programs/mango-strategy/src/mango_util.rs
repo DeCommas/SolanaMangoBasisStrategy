@@ -222,16 +222,16 @@ pub fn adjust_position_perp<'info>(
     spot_open_orders: &AccountInfo<'info>,
     seeds: &[&[&[u8]]],
     side: MangoSide,
-    amount: i64,
+    amount_base: i64,
     market_index: usize,
 ) -> ProgramResult {
     let mut mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
     mango_spot_open_orders[market_index] = spot_open_orders.key();
-    let price = get_price(&mango_cache, market_index)?;
+    /*let price = get_price(&mango_cache, market_index)?;
     let adjusted_price = match side {
         MangoSide::Ask => (price * I80F48::from(98)) / I80F48::from(100),
         MangoSide::Bid => (price * I80F48::from(102)) / I80F48::from(100),
-    };
+    };*/
     let instruction = place_perp_order(
         &mango_program.key(),
         &mango_group.key(),
@@ -245,7 +245,7 @@ pub fn adjust_position_perp<'info>(
         &mango_spot_open_orders,
         side,
         i64::MAX,
-        (I80F48::from(amount) / (adjusted_price * I80F48::from(1000))).cast(), // todo: decimals
+        (amount_base).cast(), // todo: decimals
         1,
         OrderType::Market,
         side == MangoSide::Bid, // allow only short

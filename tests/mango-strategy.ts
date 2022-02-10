@@ -224,7 +224,7 @@ describe('mango-strategy', () => {
       vaultBump,
     };
 
-    await program.rpc.adjustPositionSpot(bumps, new anchor.BN(80_000000), {
+    await program.rpc.adjustPositionSpot(bumps, new anchor.BN(80_000000), { // open short position 80 USDC
       accounts: {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
@@ -294,7 +294,8 @@ describe('mango-strategy', () => {
       vaultBump,
       serumOpenOrdersBump
     };
-    await program.rpc.adjustPositionPerp(bumps, new anchor.BN(2), new anchor.BN(80_000000), {
+
+    await program.rpc.adjustPositionPerp(bumps, new anchor.BN(2), new anchor.BN(25), { // buy 0.025 ETH
       accounts: {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
