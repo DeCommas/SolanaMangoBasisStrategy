@@ -8,8 +8,8 @@ use az::Cast;
 use fixed::types::I80F48;
 use mango::{
     instruction::{
-        create_mango_account, create_spot_open_orders, deposit, place_perp_order, withdraw,
-        MangoInstruction,
+        consume_events, create_mango_account, create_spot_open_orders, deposit, place_perp_order,
+        withdraw, MangoInstruction,
     },
     matching::{OrderType, Side as MangoSide},
     state::MangoCache,
@@ -19,7 +19,10 @@ use serum_dex::{
     instruction::{NewOrderInstructionV3, SelfTradeBehavior},
     matching::Side as SerumSide,
 };
-use solana_program::{instruction::Instruction, program::invoke_signed};
+use solana_program::{
+    instruction::Instruction,
+    program::{invoke, invoke_signed},
+};
 
 const NON_ZERO_MAX: NonZeroU64 = unsafe { NonZeroU64::new_unchecked(u64::MAX) };
 
@@ -260,6 +263,26 @@ pub fn adjust_position_perp<'info>(
             mango_event_queue.to_owned(),
         ],
         seeds,
+    )?;
+    let instruction = consume_events(
+        &mango_program.key(),
+        &mango_group.key(),
+        &mango_cache.key(),
+        &mango_market.key(),
+        &mango_event_queue.key(),
+        &mut [mango_account.key()],
+        64,
+    )?;
+    invoke(
+        &instruction,
+        &[
+            mango_program.to_owned(),
+            mango_group.to_owned(),
+            mango_cache.to_owned(),
+            mango_market.to_owned(),
+            mango_event_queue.to_owned(),
+            mango_account.to_owned(),
+        ],
     )?;
     Ok(())
 }
