@@ -16,11 +16,13 @@ pub mod mango_strategy {
 
     pub const MANGO_ACCOUNT_NUM: u64 = 1;
 
+    use anchor_spl::token::Transfer;
+
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, bumps: Bumps) -> ProgramResult {
         ctx.accounts.strategy_account.owner_pk = ctx.accounts.owner.key();
-        ctx.accounts.strategy_account.trigger_server = ctx.accounts.trigger_server.key();
+        ctx.accounts.strategy_account.trigger_server_pk = ctx.accounts.trigger_server.key();
 
         let strategy_id = ctx.accounts.strategy_id.key();
         mango_util::create_account(
@@ -58,29 +60,70 @@ pub mod mango_strategy {
         Ok(())
     }
 
-    pub fn deposit_to_mango(
-        ctx: Context<DepositToMango>,
+    pub fn withdraw(ctx: Context<Withdraw>, bumps: Bumps, amount: u64) -> ProgramResult {
+        let accounts = Transfer {
+            authority: ctx.accounts.authority.clone(),
+            from: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.destination_token_account.to_account_info(),
+        };
+        let strategy_id = ctx.accounts.strategy_id.key();
+        let bumps = &[bumps.authority_bump];
+        let seeds = &[&[strategy_id.as_ref(), AUTHORITY_PDA_SEED, &bumps[..]][..]];
+        let transfer_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            accounts,
+            seeds,
+        );
+        anchor_spl::token::transfer(transfer_ctx, amount)?;
+        Ok(())
+    }
+
+    /// amount > 0: deposit from vault to mango account, amount < 0: withdraw from mango account to vault
+    pub fn rebalance_mango(
+        ctx: Context<RebalanceMango>,
         bumps: Bumps,
-        amount: u64,
+        amount: i64,
     ) -> ProgramResult {
-        mango_util::deposit_usdc(
-            &ctx.accounts.mango_program,
-            &ctx.accounts.mango_group,
-            &ctx.accounts.mango_account,
-            &ctx.accounts.mango_cache,
-            &ctx.accounts.mango_root_bank,
-            &ctx.accounts.mango_node_bank,
-            &ctx.accounts.mango_vault,
-            &ctx.accounts.authority,
-            &ctx.accounts.token_program,
-            &ctx.accounts.vault_token_account.to_account_info(),
-            &[&[
-                ctx.accounts.strategy_id.key().as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
-            ]],
-            amount,
-        )?;
+        if amount > 0 {
+            mango_util::deposit_usdc(
+                &ctx.accounts.mango_program,
+                &ctx.accounts.mango_group,
+                &ctx.accounts.mango_account,
+                &ctx.accounts.mango_cache,
+                &ctx.accounts.mango_root_bank,
+                &ctx.accounts.mango_node_bank,
+                &ctx.accounts.mango_vault,
+                &ctx.accounts.authority,
+                &ctx.accounts.token_program,
+                &ctx.accounts.vault_token_account.to_account_info(),
+                &[&[
+                    ctx.accounts.strategy_id.key().as_ref(),
+                    AUTHORITY_PDA_SEED,
+                    &[bumps.authority_bump],
+                ]],
+                amount.abs() as u64,
+            )?;
+        } else if amount < 0 {
+            mango_util::withdraw_usdc(
+                &ctx.accounts.mango_program,
+                &ctx.accounts.mango_group,
+                &ctx.accounts.mango_account,
+                &ctx.accounts.mango_cache,
+                &ctx.accounts.mango_root_bank,
+                &ctx.accounts.mango_node_bank,
+                &ctx.accounts.mango_vault,
+                &ctx.accounts.mango_signer,
+                &ctx.accounts.authority,
+                &ctx.accounts.token_program,
+                &ctx.accounts.vault_token_account.to_account_info(),
+                &[&[
+                    ctx.accounts.strategy_id.key().as_ref(),
+                    AUTHORITY_PDA_SEED,
+                    &[bumps.authority_bump],
+                ]],
+                amount.abs() as u64,
+            )?;
+        }
         Ok(())
     }
 

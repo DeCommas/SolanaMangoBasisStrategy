@@ -63,10 +63,10 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
-pub struct DepositToMango<'info> {
+pub struct RebalanceMango<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer)]
+    #[account(signer, address = strategy_account.owner_pk)]
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -114,10 +114,44 @@ pub struct DepositToMango<'info> {
 
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
+pub struct Withdraw<'info> {
+    pub strategy_id: AccountInfo<'info>,
+
+    #[account(signer, address = strategy_account.owner_pk)]
+    pub owner: AccountInfo<'info>,
+
+    #[account(
+        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
+        bump=bumps.authority_bump,
+    )]
+    pub authority: AccountInfo<'info>,
+
+    #[account(
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        bump=bumps.strategy_bump,
+    )]
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+
+    // Vault
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
+        bump=bumps.vault_bump,
+    )]
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(mut)]
+    pub destination_token_account: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+#[instruction(bumps: Bumps)]
 pub struct AdjustPositionPerp<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer)]
+    #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
@@ -166,7 +200,7 @@ pub struct AdjustPositionPerp<'info> {
 pub struct AdjustPositionSpot<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer)]
+    #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
@@ -241,7 +275,7 @@ pub struct Bumps {
 #[derive(Debug, Default)]
 pub struct StrategyAccount {
     pub owner_pk: Pubkey,
-    pub trigger_server: Pubkey,
+    pub trigger_server_pk: Pubkey,
 }
 
 impl StrategyAccount {
