@@ -9,7 +9,7 @@ declare_id!("J8heqiEwQJs265mrMiCXjCZdDy8xAqNpBoyBRbnV3wmy");
 pub mod mango_strategy {
 
     pub const AUTHORITY_PDA_SEED: &[u8] = b"authority_account";
-    pub const STARTEGY_PDA_SEED: &[u8] = b"strategy_account";
+    pub const STRATEGY_DATA_PDA_SEED: &[u8] = b"strategy_account";
     pub const SPOT_PDA_SEED: &[u8] = b"spot_account";
     pub const VAULT_PDA_SEED: &[u8] = b"vault_account";
     pub const SERUM_PDA_SEED: &[u8] = b"serum_account";
@@ -46,8 +46,8 @@ pub mod mango_strategy {
             &ctx.accounts.mango_account.to_account_info(),
             &ctx.accounts.authority,
             &ctx.accounts.serum_dex,
-            &ctx.accounts.serum_open_orders,
-            &ctx.accounts.serum_market,
+            &ctx.accounts.spot_open_orders,
+            &ctx.accounts.spot_market,
             &ctx.accounts.mango_signer,
             &ctx.accounts.owner,
             &ctx.accounts.system_program,
@@ -148,13 +148,14 @@ pub mod mango_strategy {
             &ctx.accounts.mango_bids,
             &ctx.accounts.mango_asks,
             &ctx.accounts.mango_event_queue,
+            &ctx.accounts.mango_spot_account,
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
                 AUTHORITY_PDA_SEED,
                 &[bumps.authority_bump],
             ]],
             side,
-            amount as i64,
+            amount.abs(),
             mango_market_index as usize,
         )?;
         Ok(())
@@ -178,21 +179,21 @@ pub mod mango_strategy {
             &ctx.accounts.mango_cache,
             &ctx.accounts.mango_signer,
             &ctx.accounts.serum_dex,
-            &ctx.accounts.serum_market,
-            &ctx.accounts.serum_bids,
-            &ctx.accounts.serum_asks,
-            &ctx.accounts.serum_request_queue,
-            &ctx.accounts.serum_event_queue,
-            &ctx.accounts.serum_base,
-            &ctx.accounts.serum_quote,
-            &ctx.accounts.serum_base_root_bank,
-            &ctx.accounts.serum_base_node_bank,
-            &ctx.accounts.serum_base_vault,
-            &ctx.accounts.serum_quote_root_bank,
-            &ctx.accounts.serum_quote_node_bank,
-            &ctx.accounts.serum_quote_vault,
+            &ctx.accounts.spot_market,
+            &ctx.accounts.spot_bids,
+            &ctx.accounts.spot_asks,
+            &ctx.accounts.spot_request_queue,
+            &ctx.accounts.spot_event_queue,
+            &ctx.accounts.spot_base,
+            &ctx.accounts.spot_quote,
+            &ctx.accounts.spot_base_root_bank,
+            &ctx.accounts.spot_base_node_bank,
+            &ctx.accounts.spot_base_vault,
+            &ctx.accounts.spot_quote_root_bank,
+            &ctx.accounts.spot_quote_node_bank,
+            &ctx.accounts.spot_quote_vault,
             &ctx.accounts.serum_dex_signer,
-            &ctx.accounts.serum_open_orders,
+            &ctx.accounts.spot_open_orders,
             &ctx.accounts.srm_vault,
             &ctx.accounts.token_program,
             &[&[

@@ -20,7 +20,7 @@ pub struct Initialize<'info> {
 
     #[account(
         init,
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
         bump,
         payer = owner,
         space = StrategyAccount::LEN
@@ -52,9 +52,9 @@ pub struct Initialize<'info> {
 
     // Spot
     pub serum_dex: AccountInfo<'info>,
-    pub serum_market: AccountInfo<'info>,
+    pub spot_market: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_open_orders: AccountInfo<'info>,
+    pub spot_open_orders: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -76,7 +76,7 @@ pub struct RebalanceMango<'info> {
     pub authority: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
         bump=bumps.strategy_bump,
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
@@ -127,7 +127,7 @@ pub struct Withdraw<'info> {
     pub authority: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
         bump=bumps.strategy_bump,
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
@@ -161,7 +161,7 @@ pub struct AdjustPositionPerp<'info> {
     pub authority: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
         bump=bumps.strategy_bump,
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
@@ -191,6 +191,8 @@ pub struct AdjustPositionPerp<'info> {
     pub mango_event_queue: AccountInfo<'info>,
     pub mango_signer: AccountInfo<'info>,
 
+    pub mango_spot_account: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
 }
@@ -210,7 +212,7 @@ pub struct AdjustPositionSpot<'info> {
     pub authority: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STARTEGY_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
         bump=bumps.strategy_bump,
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
@@ -230,31 +232,31 @@ pub struct AdjustPositionSpot<'info> {
     // Spot
     pub serum_dex: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_market: AccountInfo<'info>,
+    pub spot_market: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_open_orders: AccountInfo<'info>,
+    pub spot_open_orders: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_asks: AccountInfo<'info>,
+    pub spot_asks: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_bids: AccountInfo<'info>,
+    pub spot_bids: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_request_queue: AccountInfo<'info>,
+    pub spot_request_queue: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_event_queue: AccountInfo<'info>,
+    pub spot_event_queue: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_base: AccountInfo<'info>,
+    pub spot_base: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_quote: AccountInfo<'info>,
-    pub serum_base_root_bank: AccountInfo<'info>,
+    pub spot_quote: AccountInfo<'info>,
+    pub spot_base_root_bank: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_base_node_bank: AccountInfo<'info>,
+    pub spot_base_node_bank: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_base_vault: AccountInfo<'info>,
-    pub serum_quote_root_bank: AccountInfo<'info>,
+    pub spot_base_vault: AccountInfo<'info>,
+    pub spot_quote_root_bank: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_quote_node_bank: AccountInfo<'info>,
+    pub spot_quote_node_bank: AccountInfo<'info>,
     #[account(mut)]
-    pub serum_quote_vault: AccountInfo<'info>,
+    pub spot_quote_vault: AccountInfo<'info>,
     pub serum_dex_signer: AccountInfo<'info>,
     pub srm_vault: AccountInfo<'info>,
 
@@ -268,7 +270,6 @@ pub struct Bumps {
     pub strategy_bump: u8,
     pub mango_bump: u8,
     pub vault_bump: u8,
-    pub serum_open_orders_bump: u8,
 }
 
 #[account]
