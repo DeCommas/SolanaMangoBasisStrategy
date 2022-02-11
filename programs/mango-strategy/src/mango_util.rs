@@ -24,8 +24,6 @@ use solana_program::{
     program::{invoke, invoke_signed},
 };
 
-const NON_ZERO_MAX: NonZeroU64 = unsafe { NonZeroU64::new_unchecked(u64::MAX) };
-
 pub fn create_account<'info>(
     mango_program: &AccountInfo<'info>,
     mango_group: &AccountInfo<'info>,
@@ -224,14 +222,10 @@ pub fn adjust_position_perp<'info>(
     side: MangoSide,
     amount_base: i64,
     market_index: usize,
+    reduce_only: bool,
 ) -> ProgramResult {
     let mut mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
     mango_spot_open_orders[market_index] = spot_open_orders.key();
-    /*let price = get_price(&mango_cache, market_index)?;
-    let adjusted_price = match side {
-        MangoSide::Ask => (price * I80F48::from(98)) / I80F48::from(100),
-        MangoSide::Bid => (price * I80F48::from(102)) / I80F48::from(100),
-    };*/
     let instruction = place_perp_order(
         &mango_program.key(),
         &mango_group.key(),
@@ -245,10 +239,10 @@ pub fn adjust_position_perp<'info>(
         &mango_spot_open_orders,
         side,
         i64::MAX,
-        (amount_base).cast(), // todo: decimals
+        amount_base.cast(),
         1,
         OrderType::Market,
-        side == MangoSide::Bid, // allow only short
+        reduce_only,
     )?;
     invoke_signed(
         &instruction,
@@ -317,14 +311,25 @@ pub fn adjust_position_spot<'info>(
     seeds: &[&[&[u8]]],
     side: SerumSide,
     amount: u64,
+    market_lot_size: u64,
 ) -> ProgramResult {
-    let (limit_price, max_coin_qty, max_native_pc_qty_including_fees) = match side {
-        SerumSide::Bid => (NON_ZERO_MAX, NON_ZERO_MAX, NonZeroU64::new(amount).unwrap()),
-        SerumSide::Ask => (
-            NonZeroU64::new(1).unwrap(),
-            NonZeroU64::new(amount).unwrap(),
-            NON_ZERO_MAX,
-        ),
+    let (limit_price, max_base_quantity, max_quote_quantity) = match side {
+        SerumSide::Bid => {
+            let price = 10000000000 * market_lot_size;
+            (
+                NonZeroU64::new(price).unwrap(),
+                NonZeroU64::new(amount).unwrap(),
+                NonZeroU64::new(amount * price).unwrap(),
+            )
+        }
+        SerumSide::Ask => {
+            let price = 1 * market_lot_size;
+            (
+                NonZeroU64::new(price).unwrap(),
+                NonZeroU64::new(amount).unwrap(),
+                NonZeroU64::new(amount * price).unwrap(),
+            )
+        }
     };
     let accounts = vec![
         mango_program.to_owned(),
@@ -369,8 +374,8 @@ pub fn adjust_position_spot<'info>(
             order: NewOrderInstructionV3 {
                 side,
                 limit_price,
-                max_coin_qty,
-                max_native_pc_qty_including_fees,
+                max_coin_qty: max_base_quantity,
+                max_native_pc_qty_including_fees: max_quote_quantity,
                 self_trade_behavior: SelfTradeBehavior::DecrementTake,
                 order_type: serum_dex::matching::OrderType::ImmediateOrCancel,
                 client_order_id: 1,

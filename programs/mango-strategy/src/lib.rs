@@ -62,6 +62,7 @@ pub mod mango_strategy {
         Ok(())
     }
 
+    // todo: fix open orders
     pub fn withdraw(ctx: Context<Withdraw>, bumps: Bumps, amount: u64) -> ProgramResult {
         let accounts = Transfer {
             authority: ctx.accounts.authority.clone(),
@@ -129,16 +130,18 @@ pub mod mango_strategy {
         Ok(())
     }
 
+    /// amount > 0: increase long (or decrease short), amount < 0: increase short (or decrese long)
     pub fn adjust_position_perp(
         ctx: Context<AdjustPositionPerp>,
         bumps: Bumps,
         mango_market_index: u8,
         amount: i64,
+        reduce_only: bool,
     ) -> ProgramResult {
         let side = if amount > 0 {
-            mango::matching::Side::Ask
-        } else {
             mango::matching::Side::Bid
+        } else {
+            mango::matching::Side::Ask
         };
         mango_util::adjust_position_perp(
             &ctx.accounts.mango_program,
@@ -159,6 +162,7 @@ pub mod mango_strategy {
             side,
             amount.abs(),
             mango_market_index as usize,
+            reduce_only,
         )?;
         Ok(())
     }
@@ -167,6 +171,7 @@ pub mod mango_strategy {
         ctx: Context<AdjustPositionSpot>,
         bumps: Bumps,
         amount: i64,
+        market_lot_size: u64,
     ) -> ProgramResult {
         let side = if amount > 0 {
             serum_dex::matching::Side::Bid
@@ -205,6 +210,7 @@ pub mod mango_strategy {
             ]],
             side,
             amount.abs() as u64,
+            market_lot_size,
         )?;
         Ok(())
     }
