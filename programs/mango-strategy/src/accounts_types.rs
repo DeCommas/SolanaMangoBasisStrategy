@@ -27,18 +27,6 @@ pub struct Initialize<'info> {
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
-    // Vault
-    pub vault_token_mint: Box<Account<'info, Mint>>,
-    #[account(
-        init,
-        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
-        bump,
-        payer = owner,
-        token::mint = vault_token_mint,
-        token::authority = authority,
-    )]
-    pub vault_token_account: Box<Account<'info, TokenAccount>>,
-
     // Mango
     pub mango_program: AccountInfo<'info>,
 
@@ -56,6 +44,18 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub spot_open_orders: AccountInfo<'info>,
 
+    // Vault
+    pub vault_token_mint: Box<Account<'info, Mint>>,
+    #[account(
+        init,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
+        bump,
+        payer = owner,
+        token::mint = vault_token_mint,
+        token::authority = authority,
+    )]
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: AccountInfo<'info>,
@@ -63,7 +63,7 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
-pub struct RebalanceMango<'info> {
+pub struct Deposit<'info> {
     pub strategy_id: AccountInfo<'info>,
 
     #[account(signer, address = strategy_account.owner_pk)]
@@ -81,15 +81,6 @@ pub struct RebalanceMango<'info> {
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
-    // Vault
-    pub vault_token_mint: Box<Account<'info, Mint>>,
-    #[account(
-        mut,
-        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
-        bump=bumps.vault_bump,
-    )]
-    pub vault_token_account: Box<Account<'info, TokenAccount>>,
-
     // Mango
     pub mango_program: AccountInfo<'info>,
 
@@ -106,9 +97,17 @@ pub struct RebalanceMango<'info> {
     #[account(mut)]
     pub mango_vault: AccountInfo<'info>,
 
-    pub mango_signer: AccountInfo<'info>,
+    // Vault
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
+        bump
+    )]
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
-    pub system_program: Program<'info, System>,
+    #[account(mut, has_one=owner)]
+    pub source_token_account: Box<Account<'info, TokenAccount>>,
+
     pub token_program: Program<'info, Token>,
 }
 
@@ -132,18 +131,32 @@ pub struct Withdraw<'info> {
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
-    // Vault
-    #[account(
-        mut,
-        seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
-        bump=bumps.vault_bump,
-    )]
-    pub vault_token_account: Box<Account<'info, TokenAccount>>,
+    // Mango
+    pub mango_program: AccountInfo<'info>,
 
     #[account(mut)]
+    pub mango_group: AccountInfo<'info>,
+
+    #[account(mut)] // Mango already checks for correct PDA
+    pub mango_account: AccountInfo<'info>,
+
+    pub mango_cache: AccountInfo<'info>,
+    pub mango_root_bank: AccountInfo<'info>,
+    #[account(mut)]
+    pub mango_node_bank: AccountInfo<'info>,
+    #[account(mut)]
+    pub mango_vault: AccountInfo<'info>,
+
+    pub mango_signer: AccountInfo<'info>,
+
+    #[account(mut)]
+    pub spot_open_orders: AccountInfo<'info>,
+
+    #[account(mut, has_one = owner)]
     pub destination_token_account: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -191,7 +204,7 @@ pub struct AdjustPositionPerp<'info> {
     pub mango_event_queue: AccountInfo<'info>,
     pub mango_signer: AccountInfo<'info>,
 
-    pub mango_spot_account: AccountInfo<'info>,
+    pub spot_open_orders: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -269,7 +282,6 @@ pub struct Bumps {
     pub authority_bump: u8,
     pub strategy_bump: u8,
     pub mango_bump: u8,
-    pub vault_bump: u8,
 }
 
 #[account]

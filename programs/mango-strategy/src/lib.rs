@@ -62,71 +62,70 @@ pub mod mango_strategy {
         Ok(())
     }
 
-    // todo: fix open orders
-    pub fn withdraw(ctx: Context<Withdraw>, bumps: Bumps, amount: u64) -> ProgramResult {
+    pub fn deposit(ctx: Context<Deposit>, bumps: Bumps, amount: u64) -> ProgramResult {
         let accounts = Transfer {
-            authority: ctx.accounts.authority.clone(),
-            from: ctx.accounts.vault_token_account.to_account_info(),
-            to: ctx.accounts.destination_token_account.to_account_info(),
+            authority: ctx.accounts.owner.clone(),
+            from: ctx.accounts.source_token_account.to_account_info(),
+            to: ctx.accounts.vault_token_account.to_account_info(),
         };
         let strategy_id = ctx.accounts.strategy_id.key();
-        let bumps = &[bumps.authority_bump];
-        let seeds = &[&[strategy_id.as_ref(), AUTHORITY_PDA_SEED, &bumps[..]][..]];
+        let _bumps = &[bumps.authority_bump];
+        let seeds = &[&[strategy_id.as_ref(), AUTHORITY_PDA_SEED, &_bumps[..]][..]];
+        // Mango does not allow direct transfers
         let transfer_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             accounts,
             seeds,
         );
         anchor_spl::token::transfer(transfer_ctx, amount)?;
+        mango_util::deposit_tokens(
+            &ctx.accounts.mango_program,
+            &ctx.accounts.mango_group,
+            &ctx.accounts.mango_account,
+            &ctx.accounts.mango_cache,
+            &ctx.accounts.mango_root_bank,
+            &ctx.accounts.mango_node_bank,
+            &ctx.accounts.mango_vault,
+            &ctx.accounts.authority,
+            &ctx.accounts.token_program,
+            &ctx.accounts.vault_token_account.to_account_info(),
+            &[&[
+                ctx.accounts.strategy_id.key().as_ref(),
+                AUTHORITY_PDA_SEED,
+                &[bumps.authority_bump],
+            ]],
+            amount,
+        )?;
         Ok(())
     }
 
-    /// amount > 0: deposit from vault to mango account, amount < 0: withdraw from mango account to vault
-    pub fn rebalance_mango(
-        ctx: Context<RebalanceMango>,
+    pub fn withdraw(
+        ctx: Context<Withdraw>,
         bumps: Bumps,
-        amount: i64,
+        amount: u64,
+        spot_market_index: u8,
     ) -> ProgramResult {
-        if amount > 0 {
-            mango_util::deposit_usdc(
-                &ctx.accounts.mango_program,
-                &ctx.accounts.mango_group,
-                &ctx.accounts.mango_account,
-                &ctx.accounts.mango_cache,
-                &ctx.accounts.mango_root_bank,
-                &ctx.accounts.mango_node_bank,
-                &ctx.accounts.mango_vault,
-                &ctx.accounts.authority,
-                &ctx.accounts.token_program,
-                &ctx.accounts.vault_token_account.to_account_info(),
-                &[&[
-                    ctx.accounts.strategy_id.key().as_ref(),
-                    AUTHORITY_PDA_SEED,
-                    &[bumps.authority_bump],
-                ]],
-                amount.abs() as u64,
-            )?;
-        } else if amount < 0 {
-            mango_util::withdraw_usdc(
-                &ctx.accounts.mango_program,
-                &ctx.accounts.mango_group,
-                &ctx.accounts.mango_account,
-                &ctx.accounts.mango_cache,
-                &ctx.accounts.mango_root_bank,
-                &ctx.accounts.mango_node_bank,
-                &ctx.accounts.mango_vault,
-                &ctx.accounts.mango_signer,
-                &ctx.accounts.authority,
-                &ctx.accounts.token_program,
-                &ctx.accounts.vault_token_account.to_account_info(),
-                &[&[
-                    ctx.accounts.strategy_id.key().as_ref(),
-                    AUTHORITY_PDA_SEED,
-                    &[bumps.authority_bump],
-                ]],
-                amount.abs() as u64,
-            )?;
-        }
+        mango_util::withdraw_tokens(
+            &ctx.accounts.mango_program,
+            &ctx.accounts.mango_group,
+            &ctx.accounts.mango_account,
+            &ctx.accounts.mango_cache,
+            &ctx.accounts.mango_root_bank,
+            &ctx.accounts.mango_node_bank,
+            &ctx.accounts.mango_vault,
+            &ctx.accounts.mango_signer,
+            &ctx.accounts.authority,
+            &ctx.accounts.token_program,
+            &ctx.accounts.destination_token_account.to_account_info(),
+            &ctx.accounts.spot_open_orders,
+            &[&[
+                ctx.accounts.strategy_id.key().as_ref(),
+                AUTHORITY_PDA_SEED,
+                &[bumps.authority_bump],
+            ]],
+            amount,
+            spot_market_index as usize,
+        )?;
         Ok(())
     }
 
@@ -153,7 +152,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_bids,
             &ctx.accounts.mango_asks,
             &ctx.accounts.mango_event_queue,
-            &ctx.accounts.mango_spot_account,
+            &ctx.accounts.spot_open_orders,
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
                 AUTHORITY_PDA_SEED,

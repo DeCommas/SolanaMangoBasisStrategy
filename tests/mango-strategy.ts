@@ -45,10 +45,6 @@ describe('mango-strategy', () => {
       ],
       mangoProgram,
     );
-    const [vaultTokenAccount, vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
-      program.programId
-    );
     const [spotOpenOrders, _spotOpenOrdersBump] = await PublicKey.findProgramAddress(
       [
         mangoAccount.toBuffer(),
@@ -57,13 +53,16 @@ describe('mango-strategy', () => {
       ],
       mangoProgram
     );
+    const [vaultTokenAccount, _vaultBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
+      program.programId
+    );
     console.log("Strategy id:", strategyId.publicKey.toBase58());
     console.log("Authority", authority.toBase58());
     const bumps = {
       authorityBump,
       strategyBump,
       mangoBump,
-      vaultBump,
     };
 
     await program.rpc.initialize(bumps, {
@@ -73,8 +72,6 @@ describe('mango-strategy', () => {
         triggerServer: triggerServer.publicKey,
         authority,
         strategyAccount,
-        vaultTokenMint: devnetUsdc,
-        vaultTokenAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -82,6 +79,8 @@ describe('mango-strategy', () => {
         serumDex,
         spotMarket,
         spotOpenOrders,
+        vaultTokenMint: devnetUsdc,
+        vaultTokenAccount,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: SYSVAR_RENT_PUBKEY
@@ -90,54 +89,7 @@ describe('mango-strategy', () => {
     });
   });
 
-  it('Deposit & withdraw', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
-      program.programId
-    );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
-      program.programId
-    );
-    const [_mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
-      [
-        (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
-        new anchor.BN(accountNum).toBuffer('le', 8),
-      ],
-      mangoProgram,
-    );
-    const [vaultTokenAccount, vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
-      program.programId
-    );
-
-    const bumps = {
-      authorityBump,
-      strategyBump,
-      mangoBump,
-      vaultBump,
-    };
-
-    const ownerTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
-    await usdc_token.transfer(ownerTokenAccount.address, vaultTokenAccount, owner, [], 150_000000); // 150 USDC
-    const balance = (await usdc_token.getAccountInfo(ownerTokenAccount.address)).amount;
-    await program.rpc.withdraw(bumps, new anchor.BN(50_000000), {
-      accounts: {
-        owner: owner.publicKey,
-        strategyId: strategyId.publicKey,
-        authority,
-        strategyAccount,
-        vaultTokenAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        destinationTokenAccount: ownerTokenAccount.address,
-      }
-    });
-    const new_balance = (await usdc_token.getAccountInfo(ownerTokenAccount.address)).amount;
-    assert((new_balance.toNumber() - balance.toNumber()) === 50_000000, "Incorrect balance change after withdraw");
-  });
-
-  it('Rebalance into mango account', async () => {
+  it('Deposit', async () => {
     const [authority, authorityBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
@@ -154,7 +106,7 @@ describe('mango-strategy', () => {
       ],
       mangoProgram,
     );
-    const [vaultTokenAccount, vaultBump] = await PublicKey.findProgramAddress(
+    const [vaultTokenAccount, _vaultBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
       program.programId
     );
@@ -162,16 +114,18 @@ describe('mango-strategy', () => {
       authorityBump,
       strategyBump,
       mangoBump,
-      vaultBump,
     };
-    await program.rpc.rebalanceMango(bumps, new anchor.BN(100_000000), {
+
+    const ownerTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const balanceBefore = ownerTokenAccount.amount;
+    assert(balanceBefore.toNumber() >= 100_000000, "Account balance < 100 USDC");
+
+    await program.rpc.deposit(bumps, new anchor.BN(100_000000), {
       accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         authority,
         strategyAccount,
-        vaultTokenMint: devnetUsdc,
-        vaultTokenAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -179,11 +133,13 @@ describe('mango-strategy', () => {
         mangoRootBank: "HUBX4iwWEUK5VrXXXcB7uhuKrfT4fpu2T9iZbg712JrN",
         mangoNodeBank: "J2Lmnc1e4frMnBEJARPoHtfpcohLfN67HdK1inXjTFSM",
         mangoVault: "AV4CuwdvnccZMXNhu9cSCx1mkpgHWcwWEJ7Yb8Xh8QMC",
-        mangoSigner: "CFdbPXrnPLmo5Qrze7rw9ZNiD82R1VeNdoQosooSP1Ax",
-        systemProgram: SystemProgram.programId,
+        sourceTokenAccount: ownerTokenAccount.address,
+        vaultTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       }
     });
+    const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
+    assert((balanceBefore.toNumber() - balanceAfter.toNumber()) == 100_000000, "Invalid balance change after deposit");
   });
 
   it('Adjust position spot', async () => {
@@ -212,16 +168,10 @@ describe('mango-strategy', () => {
       mangoProgram
     );
 
-    const [_vaultTokenAccount, vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
-      program.programId
-    );
-
     const bumps = {
       authorityBump,
       strategyBump,
       mangoBump,
-      vaultBump,
     };
 
     await program.rpc.adjustPositionSpot(bumps, new anchor.BN(20), new anchor.BN(1000), { // buy 0.02 ETH
@@ -275,11 +225,7 @@ describe('mango-strategy', () => {
       ],
       mangoProgram,
     );
-    const [_vaultTokenAccount, vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
-      program.programId
-    );
-    const [serumOpenOrders, serumOpenOrdersBump] = await PublicKey.findProgramAddress(
+    const [spotOpenOrders, _spotOpenOrdersBump] = await PublicKey.findProgramAddress(
       [
         mangoAccount.toBuffer(),
         new anchor.BN(2).toBuffer('le', 8),
@@ -291,8 +237,6 @@ describe('mango-strategy', () => {
       authorityBump,
       strategyBump,
       mangoBump,
-      vaultBump,
-      serumOpenOrdersBump
     };
 
     await program.rpc.adjustPositionPerp(bumps, new anchor.BN(2), new anchor.BN(-20), false, { // short 0.02 ETH
@@ -313,11 +257,70 @@ describe('mango-strategy', () => {
         mangoBids: "6jGBscmZgRXk6oVLWbnQDpRftmzrDVu82TARci9VHKuW",
         mangoEventQueue: "8WLv5fKLYkyZpFG74kRmp2RALHQFcNKmH7eJn8ebHC13",
         mangoSigner: "CFdbPXrnPLmo5Qrze7rw9ZNiD82R1VeNdoQosooSP1Ax",
-        mangoSpotAccount: serumOpenOrders,
+        spotOpenOrders,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
       },
       signers: [triggerServer]
     });
+  });
+
+  it('Withdraw', async () => {
+    const [authority, authorityBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
+      program.programId
+    );
+    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
+      program.programId
+    );
+    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+      [
+        (mangoGroup as PublicKey).toBytes(),
+        authority.toBytes(),
+        new anchor.BN(accountNum).toBuffer('le', 8),
+      ],
+      mangoProgram,
+    );
+    const [spotOpenOrders, _spotOpenOrdersBump] = await PublicKey.findProgramAddress(
+      [
+        mangoAccount.toBuffer(),
+        new anchor.BN(2).toBuffer('le', 8),
+        utf8.encode("OpenOrders")
+      ],
+      mangoProgram
+    );
+    const bumps = {
+      authorityBump,
+      strategyBump,
+      mangoBump,
+    };
+
+    const ownerTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const balanceBefore = ownerTokenAccount.amount;
+
+    await program.rpc.withdraw(bumps, new anchor.BN(10_000000), new anchor.BN(2), {
+      accounts: {
+        owner: owner.publicKey,
+        strategyId: strategyId.publicKey,
+        authority,
+        strategyAccount,
+        mangoProgram,
+        mangoGroup,
+        mangoAccount,
+        mangoCache: "8mFQbdXsFXt3R3cu3oSNS3bDZRwJRP18vyzd9J278J9z",
+        mangoRootBank: "HUBX4iwWEUK5VrXXXcB7uhuKrfT4fpu2T9iZbg712JrN",
+        mangoNodeBank: "J2Lmnc1e4frMnBEJARPoHtfpcohLfN67HdK1inXjTFSM",
+        mangoVault: "AV4CuwdvnccZMXNhu9cSCx1mkpgHWcwWEJ7Yb8Xh8QMC",
+        mangoSigner: "CFdbPXrnPLmo5Qrze7rw9ZNiD82R1VeNdoQosooSP1Ax",
+        spotOpenOrders,
+        destinationTokenAccount: ownerTokenAccount.address,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      }
+    });
+
+    const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
+    assert((balanceAfter.toNumber() - balanceBefore.toNumber()) == 10_000000, "Invalid balance change after withdraw");
   });
 });

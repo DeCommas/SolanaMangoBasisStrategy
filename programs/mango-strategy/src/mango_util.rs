@@ -101,7 +101,7 @@ pub fn create_open_orders<'info>(
     Ok(())
 }
 
-pub fn deposit_usdc<'info>(
+pub fn deposit_tokens<'info>(
     mango_program: &AccountInfo<'info>,
     mango_group: &AccountInfo<'info>,
     mango_account: &AccountInfo<'info>,
@@ -147,7 +147,7 @@ pub fn deposit_usdc<'info>(
     Ok(())
 }
 
-pub fn withdraw_usdc<'info>(
+pub fn withdraw_tokens<'info>(
     mango_program: &AccountInfo<'info>,
     mango_group: &AccountInfo<'info>,
     mango_account: &AccountInfo<'info>,
@@ -159,10 +159,13 @@ pub fn withdraw_usdc<'info>(
     authority: &AccountInfo<'info>,
     token_program: &AccountInfo<'info>,
     token_account: &AccountInfo<'info>,
+    spot_open_orders: &AccountInfo<'info>,
     seeds: &[&[&[u8]]],
     amount: u64,
+    market_index: usize,
 ) -> ProgramResult {
-    let mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
+    let mut mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
+    mango_spot_open_orders[market_index] = spot_open_orders.key();
     let instruction = withdraw(
         &mango_program.key(),
         &mango_group.key(),
@@ -182,6 +185,7 @@ pub fn withdraw_usdc<'info>(
         &instruction,
         &[
             mango_program.to_owned(),
+            //
             mango_group.to_owned(),
             mango_account.to_owned(),
             authority.to_owned(),
@@ -193,6 +197,7 @@ pub fn withdraw_usdc<'info>(
             mango_signer.to_owned(),
             authority.to_owned(),
             token_program.to_owned(),
+            spot_open_orders.to_owned(),
         ],
         seeds,
     )?;
