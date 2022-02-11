@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 pub mod accounts_types;
 pub mod mango_util;
 use crate::accounts_types::*;
+pub use mango;
+pub use mango_common;
 
 declare_id!("J8heqiEwQJs265mrMiCXjCZdDy8xAqNpBoyBRbnV3wmy");
 
