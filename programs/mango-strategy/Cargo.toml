@@ -19,8 +19,8 @@ default = []
 anchor-lang = "0.21"
 anchor-spl = "0.21"
 solana-program = "1.9.5"
-mango = { path = "../../../mango-v3/program", features = ["no-entrypoint"] }
-mango-common = { path = "../../../mango-v3/common" }
+mango = { path = "../../mango-v3/program", features = ["no-entrypoint"] }
+mango-common = { path = "../../mango-v3/common" }
 serum_dex = { version = "0.4.0", git = "https://github.com/blockworks-foundation/serum-dex.git", default-features = false, features = [
     "no-entrypoint",
     "program",
