@@ -33,7 +33,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
     );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
       program.programId
     );
@@ -61,7 +61,7 @@ describe('mango-strategy', () => {
     console.log("Authority", authority.toBase58());
     const bumps = {
       authorityBump,
-      strategyBump,
+      strategyDataBump,
       mangoBump,
     };
 
@@ -71,7 +71,7 @@ describe('mango-strategy', () => {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
         authority,
-        strategyAccount,
+        strategyData,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -94,7 +94,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
     );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
       program.programId
     );
@@ -112,7 +112,7 @@ describe('mango-strategy', () => {
     );
     const bumps = {
       authorityBump,
-      strategyBump,
+      strategyDataBump,
       mangoBump,
     };
 
@@ -125,7 +125,7 @@ describe('mango-strategy', () => {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         authority,
-        strategyAccount,
+        strategyData,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -147,7 +147,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
     );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
       program.programId
     );
@@ -170,7 +170,7 @@ describe('mango-strategy', () => {
 
     const bumps = {
       authorityBump,
-      strategyBump,
+      strategyDataBump,
       mangoBump,
     };
 
@@ -179,7 +179,7 @@ describe('mango-strategy', () => {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
         authority,
-        strategyAccount,
+        strategyData,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -213,7 +213,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
     );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
       program.programId
     );
@@ -235,7 +235,7 @@ describe('mango-strategy', () => {
     );
     const bumps = {
       authorityBump,
-      strategyBump,
+      strategyDataBump,
       mangoBump,
     };
 
@@ -244,7 +244,7 @@ describe('mango-strategy', () => {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
         authority,
-        strategyAccount,
+        strategyData,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -270,7 +270,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
       program.programId
     );
-    const [strategyAccount, strategyBump] = await PublicKey.findProgramAddress(
+    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
       program.programId
     );
@@ -292,7 +292,7 @@ describe('mango-strategy', () => {
     );
     const bumps = {
       authorityBump,
-      strategyBump,
+      strategyDataBump,
       mangoBump,
     };
 
@@ -304,7 +304,7 @@ describe('mango-strategy', () => {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         authority,
-        strategyAccount,
+        strategyData,
         mangoProgram,
         mangoGroup,
         mangoAccount,

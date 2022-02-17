@@ -23,8 +23,8 @@ pub mod mango_strategy {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, bumps: Bumps) -> ProgramResult {
-        ctx.accounts.strategy_account.owner_pk = ctx.accounts.owner.key();
-        ctx.accounts.strategy_account.trigger_server_pk = ctx.accounts.trigger_server.key();
+        ctx.accounts.strategy_data.owner_pk = ctx.accounts.owner.key();
+        ctx.accounts.strategy_data.trigger_server_pk = ctx.accounts.trigger_server.key();
 
         let strategy_id = ctx.accounts.strategy_id.key();
         mango_util::create_account(

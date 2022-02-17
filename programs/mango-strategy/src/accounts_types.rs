@@ -25,7 +25,7 @@ pub struct Initialize<'info> {
         payer = owner,
         space = StrategyAccount::LEN
     )]
-    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+    pub strategy_data: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -66,7 +66,7 @@ pub struct Initialize<'info> {
 pub struct Deposit<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_account.owner_pk)]
+    #[account(signer, address = strategy_data.owner_pk)]
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -77,9 +77,9 @@ pub struct Deposit<'info> {
 
     #[account(
         seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_bump,
+        bump=bumps.strategy_data_bump,
     )]
-    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+    pub strategy_data: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -116,7 +116,7 @@ pub struct Deposit<'info> {
 pub struct Withdraw<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_account.owner_pk)]
+    #[account(signer, address = strategy_data.owner_pk)]
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -127,9 +127,9 @@ pub struct Withdraw<'info> {
 
     #[account(
         seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_bump,
+        bump=bumps.strategy_data_bump,
     )]
-    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+    pub strategy_data: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -164,7 +164,7 @@ pub struct Withdraw<'info> {
 pub struct AdjustPositionPerp<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_account.trigger_server_pk)]
+    #[account(signer, address = strategy_data.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
@@ -175,9 +175,9 @@ pub struct AdjustPositionPerp<'info> {
 
     #[account(
         seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_bump,
+        bump=bumps.strategy_data_bump,
     )]
-    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+    pub strategy_data: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -215,7 +215,7 @@ pub struct AdjustPositionPerp<'info> {
 pub struct AdjustPositionSpot<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_account.trigger_server_pk)]
+    #[account(signer, address = strategy_data.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
@@ -226,9 +226,9 @@ pub struct AdjustPositionSpot<'info> {
 
     #[account(
         seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_bump,
+        bump=bumps.strategy_data_bump,
     )]
-    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+    pub strategy_data: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -280,7 +280,7 @@ pub struct AdjustPositionSpot<'info> {
 
 pub struct Bumps {
     pub authority_bump: u8,
-    pub strategy_bump: u8,
+    pub strategy_data_bump: u8,
     pub mango_bump: u8,
 }
 
