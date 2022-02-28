@@ -2,6 +2,9 @@ use anchor_lang::prelude::*;
 pub mod accounts_types;
 pub mod mango_util;
 use crate::accounts_types::*;
+use crate::mango_util::calculate_token_price;
+use anchor_spl::token::Transfer;
+use fixed::types::I80F48;
 pub use mango;
 pub use mango_common;
 
@@ -9,35 +12,46 @@ declare_id!("J8heqiEwQJs265mrMiCXjCZdDy8xAqNpBoyBRbnV3wmy");
 
 #[program]
 pub mod mango_strategy {
+    use anchor_spl::token::{burn, mint_to, Burn, MintTo};
+    use az::CheckedCast;
 
-    pub const AUTHORITY_PDA_SEED: &[u8] = b"authority_account";
-    pub const STRATEGY_DATA_PDA_SEED: &[u8] = b"strategy_account";
-    pub const SPOT_PDA_SEED: &[u8] = b"spot_account";
-    pub const VAULT_PDA_SEED: &[u8] = b"vault_account";
-    pub const SERUM_PDA_SEED: &[u8] = b"serum_account";
-
-    pub const MANGO_ACCOUNT_NUM: u64 = 1;
-
-    use anchor_spl::token::Transfer;
+    use crate::mango_util::calculate_tvl;
 
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, bumps: Bumps) -> ProgramResult {
-        ctx.accounts.strategy_data.owner_pk = ctx.accounts.owner.key();
-        ctx.accounts.strategy_data.trigger_server_pk = ctx.accounts.trigger_server.key();
+    pub const STRATEGY_ACCOUNT_PDA_SEED: &[u8] = b"account";
+    pub const VAULT_PDA_SEED: &[u8] = b"vault";
+    pub const MINT_PDA_SEED: &[u8] = b"mint";
+
+    pub const MANGO_ACCOUNT_NUM: u64 = 1;
+    pub const STRATEGY_TOKEN_DECIMALS: u8 = 6; // same as USDC
+
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        bumps: Bumps,
+        market_info: MarketInfo,
+        limits_account: Option<Pubkey>,
+    ) -> ProgramResult {
+        ctx.accounts.strategy_account.owner = ctx.accounts.owner.key();
+        ctx.accounts.strategy_account.trigger_server_pk = ctx.accounts.trigger_server.key();
+        ctx.accounts.strategy_account.vault_token_mint = ctx.accounts.vault_token_mint.key();
+        ctx.accounts.strategy_account.mango_program = ctx.accounts.mango_program.key();
+        ctx.accounts.strategy_account.mango_group = ctx.accounts.mango_group.key();
+        ctx.accounts.strategy_account.limits_account = limits_account;
+        ctx.accounts.strategy_account.market_info = market_info;
 
         let strategy_id = ctx.accounts.strategy_id.key();
         mango_util::create_account(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account.to_account_info(),
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.owner,
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
             MANGO_ACCOUNT_NUM,
         )?;
@@ -46,7 +60,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account.to_account_info(),
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.serum_dex,
             &ctx.accounts.spot_open_orders,
             &ctx.accounts.spot_market,
@@ -55,29 +69,58 @@ pub mod mango_strategy {
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
         )?;
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<Deposit>, bumps: Bumps, amount: u64) -> ProgramResult {
+    pub fn deposit(ctx: Context<Deposit>, bumps: Bumps, vault_token_amount: u64) -> ProgramResult {
+        let tvl = calculate_tvl(
+            &ctx.accounts.mango_program,
+            &ctx.accounts.mango_group,
+            &ctx.accounts.mango_account,
+            &ctx.accounts.mango_cache,
+            &ctx.accounts.strategy_account.market_info,
+        )?;
+        if let Some(limits_account) = ctx.accounts.strategy_account.limits_account {
+            let limits_account = ctx
+                .remaining_accounts
+                .iter()
+                .find(|acc| acc.key() == limits_account)
+                .ok_or_else(|| ErrorCode::InvalidLimitsAccount)?;
+            let limits_account: LimitsAccount =
+                LimitsAccount::try_deserialize(&mut &limits_account.data.borrow_mut()[..])
+                    .map_err(|_| ErrorCode::InvalidLimitsAccount)?;
+            if limits_account
+                .max_tvl
+                .map(|max_tvl_limit| (tvl + I80F48::from_num(vault_token_amount)) >= max_tvl_limit)
+                == Some(true)
+            {
+                return Err(ErrorCode::TvlLimitReached.into());
+            }
+            if !limits_account.whitelist.contains(&ctx.accounts.owner.key()) {
+                return Err(ErrorCode::NotInWhitelist.into());
+            }
+        }
+        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)?;
+        let strategy_token_amount = I80F48::from_num(vault_token_amount) / token_price;
         let accounts = Transfer {
             authority: ctx.accounts.owner.clone(),
-            from: ctx.accounts.source_token_account.to_account_info(),
+            from: ctx.accounts.deposit_token_account.to_account_info(),
             to: ctx.accounts.vault_token_account.to_account_info(),
         };
         let strategy_id = ctx.accounts.strategy_id.key();
-        let _bumps = &[bumps.authority_bump];
-        let seeds = &[&[strategy_id.as_ref(), AUTHORITY_PDA_SEED, &_bumps[..]][..]];
+        let bump = &[bumps.strategy_account_bump];
+        let seeds = &[&[strategy_id.as_ref(), STRATEGY_ACCOUNT_PDA_SEED, &bump[..]][..]];
         // Mango does not allow direct transfers
         let transfer_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             accounts,
             seeds,
         );
-        anchor_spl::token::transfer(transfer_ctx, amount)?;
+        anchor_spl::token::transfer(transfer_ctx, vault_token_amount)?;
         mango_util::deposit_tokens(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
@@ -86,15 +129,32 @@ pub mod mango_strategy {
             &ctx.accounts.mango_root_bank,
             &ctx.accounts.mango_node_bank,
             &ctx.accounts.mango_vault,
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.token_program,
             &ctx.accounts.vault_token_account.to_account_info(),
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
-            amount,
+            vault_token_amount,
+        )?;
+
+        let cpi_accounts = MintTo {
+            mint: ctx.accounts.strategy_token_mint.to_account_info(),
+            to: ctx.accounts.strategy_token_account.to_account_info(),
+            authority: ctx.accounts.strategy_account.to_account_info(),
+        };
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            seeds,
+        );
+        mint_to(
+            cpi_context,
+            strategy_token_amount
+                .checked_cast()
+                .expect("strategy_token_amount cast failed"),
         )?;
         Ok(())
     }
@@ -102,9 +162,17 @@ pub mod mango_strategy {
     pub fn withdraw(
         ctx: Context<Withdraw>,
         bumps: Bumps,
-        amount: u64,
-        spot_market_index: u8,
+        strategy_token_amount: u64,
     ) -> ProgramResult {
+        let tvl = calculate_tvl(
+            &ctx.accounts.mango_program,
+            &ctx.accounts.mango_group,
+            &ctx.accounts.mango_account,
+            &ctx.accounts.mango_cache,
+            &ctx.accounts.strategy_account.market_info,
+        )?;
+        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)?;
+        let vault_token_amount = I80F48::from_num(strategy_token_amount) * token_price;
         mango_util::withdraw_tokens(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
@@ -114,18 +182,28 @@ pub mod mango_strategy {
             &ctx.accounts.mango_node_bank,
             &ctx.accounts.mango_vault,
             &ctx.accounts.mango_signer,
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.token_program,
-            &ctx.accounts.destination_token_account.to_account_info(),
+            &ctx.accounts.withdraw_token_account.to_account_info(),
             &ctx.accounts.spot_open_orders,
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
-            amount,
-            spot_market_index as usize,
+            vault_token_amount
+                .checked_cast()
+                .expect("vault_token_amount cast failed"),
+            ctx.accounts.strategy_account.market_info.spot_market_index as usize,
         )?;
+        let cpi_accounts = Burn {
+            mint: ctx.accounts.strategy_token_mint.to_account_info(),
+            to: ctx.accounts.strategy_token_account.to_account_info(),
+            authority: ctx.accounts.owner.to_account_info(),
+        };
+        let cpi_context =
+            CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+        burn(cpi_context, strategy_token_amount)?;
         Ok(())
     }
 
@@ -133,10 +211,10 @@ pub mod mango_strategy {
     pub fn adjust_position_perp(
         ctx: Context<AdjustPositionPerp>,
         bumps: Bumps,
-        mango_market_index: u8,
         amount: i64,
         reduce_only: bool,
     ) -> ProgramResult {
+        assert_ne!(amount, 0, "Amount should not be zero");
         let side = if amount > 0 {
             mango::matching::Side::Bid
         } else {
@@ -146,7 +224,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account,
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.mango_cache,
             &ctx.accounts.mango_market,
             &ctx.accounts.mango_bids,
@@ -155,12 +233,12 @@ pub mod mango_strategy {
             &ctx.accounts.spot_open_orders,
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
             side,
             amount.abs(),
-            mango_market_index as usize,
+            ctx.accounts.strategy_account.market_info.perp_market_index as usize,
             reduce_only,
         )?;
         Ok(())
@@ -170,8 +248,8 @@ pub mod mango_strategy {
         ctx: Context<AdjustPositionSpot>,
         bumps: Bumps,
         amount: i64,
-        market_lot_size: u64,
     ) -> ProgramResult {
+        assert_ne!(amount, 0, "Amount should not be zero");
         let side = if amount > 0 {
             serum_dex::matching::Side::Bid
         } else {
@@ -181,7 +259,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account,
-            &ctx.accounts.authority,
+            &ctx.accounts.strategy_account.to_account_info(),
             &ctx.accounts.mango_cache,
             &ctx.accounts.mango_signer,
             &ctx.accounts.serum_dex,
@@ -204,24 +282,53 @@ pub mod mango_strategy {
             &ctx.accounts.token_program,
             &[&[
                 ctx.accounts.strategy_id.key().as_ref(),
-                AUTHORITY_PDA_SEED,
-                &[bumps.authority_bump],
+                STRATEGY_ACCOUNT_PDA_SEED,
+                &[bumps.strategy_account_bump],
             ]],
             side,
             amount.abs() as u64,
-            market_lot_size,
+            ctx.accounts
+                .strategy_account
+                .market_info
+                .spot_market_lot_size,
         )?;
+        Ok(())
+    }
+
+    pub fn set_limits(
+        ctx: Context<SetLimits>,
+        bumps: Bumps,
+        max_tvl: Option<u64>,
+        whitelist: Vec<Pubkey>,
+    ) -> ProgramResult {
+        ctx.accounts.limits_account.max_tvl = max_tvl;
+        ctx.accounts.limits_account.whitelist = whitelist;
+        ctx.accounts.strategy_account.limits_account = Some(ctx.accounts.limits_account.key());
+        let _ = bumps; // bumps used in validation
+        Ok(())
+    }
+
+    pub fn drop_limits(ctx: Context<DropLimits>, bumps: Bumps) -> ProgramResult {
+        ctx.accounts.strategy_account.limits_account = None;
+        let _ = bumps; // bumps used in validation
         Ok(())
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub enum Side {
-    Long,
-    Short,
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct MarketInfo {
+    pub perp_market_index: u8,
+    pub spot_market_index: u8,
+    pub spot_market_lot_size: u64,
+    pub spot_token_index: u8,
 }
 
 #[error]
 pub enum ErrorCode {
     InvalidAccount,
+    InvalidLimitsAccount,
+    #[msg("Maximum TVL limit reached")]
+    TvlLimitReached,
+    #[msg("Signer account not in whitelist")]
+    NotInWhitelist,
 }

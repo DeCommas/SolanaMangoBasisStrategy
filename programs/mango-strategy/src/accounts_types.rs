@@ -1,11 +1,11 @@
-use crate::mango_strategy;
+use crate::{mango_strategy, MarketInfo};
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct Initialize<'info> {
-    #[account(mut, signer)]
+    #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
     pub strategy_id: AccountInfo<'info>,
@@ -13,19 +13,13 @@ pub struct Initialize<'info> {
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
-        bump=bumps.authority_bump,
-    )]
-    pub authority: AccountInfo<'info>,
-
-    #[account(
         init,
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
         bump,
         payer = owner,
         space = StrategyAccount::LEN
     )]
-    pub strategy_data: Box<Account<'info, StrategyAccount>>,
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
     pub mango_program: AccountInfo<'info>,
@@ -52,9 +46,20 @@ pub struct Initialize<'info> {
         bump,
         payer = owner,
         token::mint = vault_token_mint,
-        token::authority = authority,
+        token::authority = strategy_account,
     )]
     pub vault_token_account: Box<Account<'info, TokenAccount>>,
+
+    // Strategy token
+    #[account(
+        init,
+        payer = owner,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
+        bump,
+        mint::decimals = mango_strategy::STRATEGY_TOKEN_DECIMALS,
+        mint::authority = strategy_account
+    )]
+    pub strategy_token_mint: Box<Account<'info, Mint>>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -66,25 +71,20 @@ pub struct Initialize<'info> {
 pub struct Deposit<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_data.owner_pk)]
+    #[account(mut, signer)]
     pub owner: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
-        bump=bumps.authority_bump,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
     )]
-    pub authority: AccountInfo<'info>,
-
-    #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_data_bump,
-    )]
-    pub strategy_data: Box<Account<'info, StrategyAccount>>,
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
-    #[account(mut)]
+    #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
     #[account(mut)] // Mango checks for correct PDA
@@ -97,7 +97,7 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub mango_vault: AccountInfo<'info>,
 
-    // Vault
+    // Vault (mango does not allow direct deposit from token accounts not owned by signer)
     #[account(
         mut,
         seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
@@ -105,8 +105,24 @@ pub struct Deposit<'info> {
     )]
     pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut, has_one=owner)]
-    pub source_token_account: Box<Account<'info, TokenAccount>>,
+    // Deposit token
+    #[account(
+        mut,
+        has_one = owner,
+        constraint = deposit_token_account.mint == strategy_account.vault_token_mint
+    )]
+    pub deposit_token_account: Box<Account<'info, TokenAccount>>,
+
+    // Strategy token
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
+        bump,
+    )]
+    pub strategy_token_mint: Box<Account<'info, Mint>>,
+
+    #[account(mut, constraint = strategy_token_account.mint == strategy_token_mint.to_account_info().key())]
+    pub strategy_token_account: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -116,25 +132,20 @@ pub struct Deposit<'info> {
 pub struct Withdraw<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_data.owner_pk)]
+    #[account(mut, signer)]
     pub owner: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
-        bump=bumps.authority_bump,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
     )]
-    pub authority: AccountInfo<'info>,
-
-    #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_data_bump,
-    )]
-    pub strategy_data: Box<Account<'info, StrategyAccount>>,
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
-    #[account(mut)]
+    #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
     #[account(mut)] // Mango already checks for correct PDA
@@ -152,8 +163,24 @@ pub struct Withdraw<'info> {
     #[account(mut)]
     pub spot_open_orders: AccountInfo<'info>,
 
-    #[account(mut, has_one = owner)]
-    pub destination_token_account: Box<Account<'info, TokenAccount>>,
+    // Withdraw token
+    #[account(
+        mut,
+        has_one = owner,
+        constraint = withdraw_token_account.mint == strategy_account.vault_token_mint
+    )]
+    pub withdraw_token_account: Box<Account<'info, TokenAccount>>,
+
+    // Strategy token
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
+        bump,
+    )]
+    pub strategy_token_mint: Box<Account<'info, Mint>>,
+
+    #[account(mut, constraint = strategy_token_account.mint == strategy_token_mint.to_account_info().key())]
+    pub strategy_token_account: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -164,25 +191,20 @@ pub struct Withdraw<'info> {
 pub struct AdjustPositionPerp<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_data.trigger_server_pk)]
+    #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
-        bump=bumps.authority_bump,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
     )]
-    pub authority: AccountInfo<'info>,
-
-    #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_data_bump,
-    )]
-    pub strategy_data: Box<Account<'info, StrategyAccount>>,
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
-    #[account(mut)]
+    #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
     #[account(mut)] // Mango checks for correct PDA
@@ -215,25 +237,20 @@ pub struct AdjustPositionPerp<'info> {
 pub struct AdjustPositionSpot<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_data.trigger_server_pk)]
+    #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::AUTHORITY_PDA_SEED],
-        bump=bumps.authority_bump,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
     )]
-    pub authority: AccountInfo<'info>,
-
-    #[account(
-        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_DATA_PDA_SEED],
-        bump=bumps.strategy_data_bump,
-    )]
-    pub strategy_data: Box<Account<'info, StrategyAccount>>,
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
-    #[account(mut)]
+    #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
     #[account(mut)] // Mango checks for correct PDA
@@ -276,21 +293,88 @@ pub struct AdjustPositionSpot<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[derive(Accounts)]
+#[instruction(bumps: Bumps)]
+pub struct SetLimits<'info> {
+    pub strategy_id: AccountInfo<'info>,
+
+    #[account(signer, address = strategy_account.owner)]
+    pub owner: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
+    )]
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+
+    #[account(
+        signer,
+        init,
+        payer = owner,
+        space = LimitsAccount::LEN,
+        constraint = strategy_account.limits_account.is_none() || strategy_account.limits_account == Some(limits_account.key()))
+    ]
+    pub limits_account: Box<Account<'info, LimitsAccount>>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(bumps: Bumps)]
+pub struct DropLimits<'info> {
+    pub strategy_id: AccountInfo<'info>,
+
+    #[account(signer, address = strategy_account.owner)]
+    pub owner: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
+        bump=bumps.strategy_account_bump,
+    )]
+    pub strategy_account: Box<Account<'info, StrategyAccount>>,
+
+    #[account(
+        mut,
+        constraint = strategy_account.limits_account == Some(limits_account.key()))
+    ]
+    pub limits_account: Box<Account<'info, LimitsAccount>>,
+
+    pub system_program: Program<'info, System>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 
 pub struct Bumps {
-    pub authority_bump: u8,
-    pub strategy_data_bump: u8,
-    pub mango_bump: u8,
+    pub strategy_account_bump: u8,
+}
+
+#[account]
+#[derive(Debug)]
+pub struct StrategyAccount {
+    pub owner: Pubkey, // Owner can only change limits
+    pub trigger_server_pk: Pubkey,
+    pub vault_token_mint: Pubkey,
+    pub mango_program: Pubkey,
+    pub mango_group: Pubkey,
+    pub limits_account: Option<Pubkey>,
+    pub market_info: MarketInfo,
+}
+
+impl StrategyAccount {
+    pub const LEN: usize = 6 * 32 + 12 + 8;
 }
 
 #[account]
 #[derive(Debug, Default)]
-pub struct StrategyAccount {
-    pub owner_pk: Pubkey,
-    pub trigger_server_pk: Pubkey,
+pub struct LimitsAccount {
+    // in USDC including decimals
+    pub max_tvl: Option<u64>,
+    pub whitelist: Vec<Pubkey>,
 }
 
-impl StrategyAccount {
-    pub const LEN: usize = 2 * 32 + 8;
+impl LimitsAccount {
+    pub const WHITELIST_CAP: usize = 16;
+    pub const LEN: usize = 17 + LimitsAccount::WHITELIST_CAP * 32 + 8;
 }

@@ -1,6 +1,6 @@
 import assert from 'assert';
 import * as anchor from '@project-serum/anchor';
-import { Program } from '@project-serum/anchor';
+import { Program, BN } from '@project-serum/anchor';
 import { MangoStrategy } from '../target/types/mango_strategy';
 import { SystemProgram, SYSVAR_RENT_PUBKEY, PublicKey } from '@solana/web3.js';
 import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
@@ -28,19 +28,21 @@ describe('mango-strategy', () => {
   const devnetUsdc = new PublicKey("8FRFC6MoGGkMFQwngccyu69VnYbzykGeez7ignHVAFSN");
   const usdc_token = new Token(anchor.getProvider().connection, devnetUsdc, TOKEN_PROGRAM_ID, owner);
 
+  const positionSize = 15; // 0.015 ETH
+
+  const depositAmount = 80_000000; // 80 USDC
+
+  const limitsAccount = anchor.web3.Keypair.generate();
+
   it('Initialize', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
+    const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
-    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
-      program.programId
-    );
-    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+    const [mangoAccount, _mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
+        strategyAccount.toBytes(),
         new anchor.BN(accountNum).toBuffer('le', 8),
       ],
       mangoProgram,
@@ -54,24 +56,33 @@ describe('mango-strategy', () => {
       mangoProgram
     );
     const [vaultTokenAccount, _vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
+      [strategyId.publicKey.toBuffer(), utf8.encode("vault")],
       program.programId
     );
+
+    const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("mint")],
+      program.programId
+    );
+
     console.log("Strategy id:", strategyId.publicKey.toBase58());
-    console.log("Authority", authority.toBase58());
+    console.log("Strategy account:", strategyAccount.toBase58());
     const bumps = {
-      authorityBump,
-      strategyDataBump,
-      mangoBump,
+      strategyAccountBump,
     };
 
-    await program.rpc.initialize(bumps, {
+    const marketInfo = {
+      perpMarketIndex: 2,
+      spotMarketIndex: 2,
+      spotMarketLotSize: new BN(1000),
+      spotTokenIndex: 2,
+    };
+    await program.rpc.initialize(bumps, marketInfo, null, {
       accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
-        authority,
-        strategyData,
+        strategyAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -81,51 +92,65 @@ describe('mango-strategy', () => {
         spotOpenOrders,
         vaultTokenMint: devnetUsdc,
         vaultTokenAccount,
+        strategyTokenMint,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: SYSVAR_RENT_PUBKEY
       },
       signers: [owner],
     });
+    await program.rpc.setLimits(bumps, new BN(depositAmount + 1_000000), [owner.publicKey], {
+      accounts: {
+        strategyId: strategyId.publicKey,
+        owner: owner.publicKey,
+        strategyAccount,
+        limitsAccount: limitsAccount.publicKey,
+        systemProgram: SystemProgram.programId,
+      },
+      signers: [owner, limitsAccount],
+    });
   });
 
   it('Deposit', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
+    const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
-    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
-      program.programId
-    );
-    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+    const [mangoAccount, _mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
+        strategyAccount.toBytes(),
         new anchor.BN(accountNum).toBuffer('le', 8),
       ],
       mangoProgram,
     );
     const [vaultTokenAccount, _vaultBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("vault_account")],
+      [strategyId.publicKey.toBuffer(), utf8.encode("vault")],
       program.programId
     );
+    const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("mint")],
+      program.programId
+    );
+
     const bumps = {
-      authorityBump,
-      strategyDataBump,
-      mangoBump,
+      strategyAccountBump,
     };
 
-    const ownerTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
-    const balanceBefore = ownerTokenAccount.amount;
-    assert(balanceBefore.toNumber() >= 100_000000, "Account balance < 100 USDC");
+    const strategy_token = new Token(anchor.getProvider().connection, strategyTokenMint, TOKEN_PROGRAM_ID, owner);
+    const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const strategyTokenBalanceBefore = strategyTokenAccount.amount;
 
-    await program.rpc.deposit(bumps, new anchor.BN(100_000000), {
+    const usdcTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const usdcBalanceBefore = usdcTokenAccount.amount;
+    assert(usdcBalanceBefore.toNumber() >= depositAmount, "Account balance < 100 USDC");
+
+
+    await program.rpc.deposit(bumps, new anchor.BN(depositAmount), {
       accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
-        authority,
-        strategyData,
+        strategyAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -133,28 +158,31 @@ describe('mango-strategy', () => {
         mangoRootBank: "HUBX4iwWEUK5VrXXXcB7uhuKrfT4fpu2T9iZbg712JrN",
         mangoNodeBank: "J2Lmnc1e4frMnBEJARPoHtfpcohLfN67HdK1inXjTFSM",
         mangoVault: "AV4CuwdvnccZMXNhu9cSCx1mkpgHWcwWEJ7Yb8Xh8QMC",
-        sourceTokenAccount: ownerTokenAccount.address,
         vaultTokenAccount,
+        depositTokenAccount: usdcTokenAccount.address,
+        strategyTokenMint,
+        strategyTokenAccount: strategyTokenAccount.address,
         tokenProgram: TOKEN_PROGRAM_ID,
-      }
+      },
+      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }],
     });
     const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    assert((balanceBefore.toNumber() - balanceAfter.toNumber()) == 100_000000, "Invalid balance change after deposit");
+    assert((usdcBalanceBefore.toNumber() - balanceAfter.toNumber()) == depositAmount, "Invalid balance change after deposit");
+
+    const strategyTokenBalanceAfter = (await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
+    const received = strategyTokenBalanceAfter.toNumber() - strategyTokenBalanceBefore.toNumber();
+    console.log("Received", received / Math.pow(10, (await strategy_token.getMintInfo()).decimals), "strategy tokens");
   });
 
   it('Adjust position spot', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
+    const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
-    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
-      program.programId
-    );
-    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+    const [mangoAccount, _mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
+        strategyAccount.toBytes(),
         new anchor.BN(accountNum).toBuffer('le', 8),
       ],
       mangoProgram,
@@ -169,17 +197,14 @@ describe('mango-strategy', () => {
     );
 
     const bumps = {
-      authorityBump,
-      strategyDataBump,
-      mangoBump,
+      strategyAccountBump
     };
 
-    await program.rpc.adjustPositionSpot(bumps, new anchor.BN(20), new anchor.BN(1000), { // buy 0.02 ETH
+    await program.rpc.adjustPositionSpot(bumps, new anchor.BN(positionSize), { // long
       accounts: {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
-        authority,
-        strategyData,
+        strategyAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -209,18 +234,14 @@ describe('mango-strategy', () => {
   });
 
   it('Adjust position perp', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
-      program.programId
-    );
-    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
+    const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
     const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
+        strategyAccount.toBytes(),
         new anchor.BN(accountNum).toBuffer('le', 8),
       ],
       mangoProgram,
@@ -234,17 +255,14 @@ describe('mango-strategy', () => {
       mangoProgram
     );
     const bumps = {
-      authorityBump,
-      strategyDataBump,
-      mangoBump,
+      strategyAccountBump,
     };
 
-    await program.rpc.adjustPositionPerp(bumps, new anchor.BN(2), new anchor.BN(-20), false, { // short 0.02 ETH
+    await program.rpc.adjustPositionPerp(bumps, new anchor.BN(-positionSize), false, { // short
       accounts: {
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
-        authority,
-        strategyData,
+        strategyAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -266,18 +284,14 @@ describe('mango-strategy', () => {
   });
 
   it('Withdraw', async () => {
-    const [authority, authorityBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("authority_account")],
+    const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
-    const [strategyData, strategyDataBump] = await PublicKey.findProgramAddress(
-      [strategyId.publicKey.toBuffer(), utf8.encode("strategy_account")],
-      program.programId
-    );
-    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+    const [mangoAccount, _mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
-        authority.toBytes(),
+        strategyAccount.toBytes(),
         new anchor.BN(accountNum).toBuffer('le', 8),
       ],
       mangoProgram,
@@ -290,21 +304,28 @@ describe('mango-strategy', () => {
       ],
       mangoProgram
     );
+    const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
+      [strategyId.publicKey.toBuffer(), utf8.encode("mint")],
+      program.programId
+    );
     const bumps = {
-      authorityBump,
-      strategyDataBump,
-      mangoBump,
+      strategyAccountBump
     };
 
-    const ownerTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
-    const balanceBefore = ownerTokenAccount.amount;
+    const usdcTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const strategy_token = new Token(anchor.getProvider().connection, strategyTokenMint, TOKEN_PROGRAM_ID, owner);
+    const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
 
-    await program.rpc.withdraw(bumps, new anchor.BN(10_000000), new anchor.BN(2), {
+    const strategyTokenBalanceBefore = strategyTokenAccount.amount;
+    const usdcBalanceBefore = usdcTokenAccount.amount;
+
+    const WITHDRAW_AMOUNT = 10_000000;
+
+    await program.rpc.withdraw(bumps, new anchor.BN(WITHDRAW_AMOUNT), {
       accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
-        authority,
-        strategyData,
+        strategyAccount,
         mangoProgram,
         mangoGroup,
         mangoAccount,
@@ -314,13 +335,20 @@ describe('mango-strategy', () => {
         mangoVault: "AV4CuwdvnccZMXNhu9cSCx1mkpgHWcwWEJ7Yb8Xh8QMC",
         mangoSigner: "CFdbPXrnPLmo5Qrze7rw9ZNiD82R1VeNdoQosooSP1Ax",
         spotOpenOrders,
-        destinationTokenAccount: ownerTokenAccount.address,
+        withdrawTokenAccount: usdcTokenAccount.address,
+        strategyTokenMint: strategyTokenMint,
+        strategyTokenAccount: strategyTokenAccount.address,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
       }
     });
 
-    const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    assert((balanceAfter.toNumber() - balanceBefore.toNumber()) == 10_000000, "Invalid balance change after withdraw");
+    const strategyTokenBalanceAfter = (await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
+    const usdcBalanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
+    console.log("Received", (usdcBalanceAfter.toNumber() - usdcBalanceBefore.toNumber()) / Math.pow(10, 6), "USDC");
+    assert(
+      (strategyTokenBalanceBefore.toNumber() - strategyTokenBalanceAfter.toNumber()) == WITHDRAW_AMOUNT,
+      "Invalid token balance change after withdraw"
+    );
   });
 });

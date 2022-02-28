@@ -1,18 +1,20 @@
 use std::num::NonZeroU64;
 
 use anchor_lang::{
-    prelude::{AccountInfo, ProgramError, ProgramResult},
+    prelude::{Account, AccountInfo, ProgramError, ProgramResult},
     Key, ToAccountMetas,
 };
+use anchor_spl::token::Mint;
 use az::Cast;
 use fixed::types::I80F48;
 use mango::{
+    error::MangoError,
     instruction::{
         consume_events, create_mango_account, create_spot_open_orders, deposit, place_perp_order,
         withdraw, MangoInstruction,
     },
     matching::{OrderType, Side as MangoSide},
-    state::MangoCache,
+    state::{MangoAccount, MangoCache, MangoGroup},
 };
 use mango_common::Loadable;
 use serum_dex::{
@@ -23,6 +25,10 @@ use solana_program::{
     instruction::Instruction,
     program::{invoke, invoke_signed},
 };
+
+use crate::MarketInfo;
+
+const USDC_TOKEN_INDEX: usize = 15;
 
 pub fn create_account<'info>(
     mango_program: &AccountInfo<'info>,
@@ -243,10 +249,13 @@ pub fn adjust_position_perp<'info>(
         &mango_event_queue.key(),
         &mango_spot_open_orders,
         side,
-        i64::MAX,
+        match side {
+            MangoSide::Bid => i64::MAX,
+            MangoSide::Ask => 1,
+        },
         amount_base.cast(),
         1,
-        OrderType::Market,
+        OrderType::ImmediateOrCancel,
         reduce_only,
     )?;
     invoke_signed(
@@ -318,24 +327,13 @@ pub fn adjust_position_spot<'info>(
     amount: u64,
     market_lot_size: u64,
 ) -> ProgramResult {
-    let (limit_price, max_base_quantity, max_quote_quantity) = match side {
-        SerumSide::Bid => {
-            let price = 10000000000 * market_lot_size;
-            (
-                NonZeroU64::new(price).unwrap(),
-                NonZeroU64::new(amount).unwrap(),
-                NonZeroU64::new(amount * price).unwrap(),
-            )
-        }
-        SerumSide::Ask => {
-            let price = 1 * market_lot_size;
-            (
-                NonZeroU64::new(price).unwrap(),
-                NonZeroU64::new(amount).unwrap(),
-                NonZeroU64::new(amount * price).unwrap(),
-            )
-        }
+    let price = match side {
+        SerumSide::Bid => 100000000000 * market_lot_size,
+        SerumSide::Ask => 1 * market_lot_size,
     };
+    let limit_price = NonZeroU64::new(price).unwrap();
+    let max_base_quantity = NonZeroU64::new(amount).unwrap();
+    let max_quote_quantity = NonZeroU64::new(amount * price).unwrap();
     let accounts = vec![
         mango_program.to_owned(),
         //
@@ -391,4 +389,41 @@ pub fn adjust_position_spot<'info>(
     };
     invoke_signed(&instruction, &accounts, seeds)?;
     Ok(())
+}
+
+pub fn calculate_tvl<'info>(
+    mango_program: &AccountInfo<'info>,
+    mango_group: &AccountInfo<'info>,
+    mango_account: &AccountInfo<'info>,
+    mango_cache: &AccountInfo<'info>,
+    market_info: &MarketInfo,
+) -> Result<I80F48, MangoError> {
+    let mango_account =
+        MangoAccount::load_checked(mango_account, &mango_program.key(), &mango_group.key())?;
+    let mango_group_data = MangoGroup::load_checked(mango_group, &mango_program.key())?;
+    let mango_cache_data =
+        MangoCache::load_checked(mango_cache, &mango_program.key(), &mango_group_data)?;
+    let spot_token_balance = mango_account.get_native_deposit(
+        &mango_cache_data.root_bank_cache[market_info.spot_token_index as usize],
+        market_info.spot_token_index as usize,
+    )?;
+    let spot_token_price = mango_cache_data.get_price(market_info.spot_token_index as usize);
+    let usdc_balance = mango_account.get_native_deposit(
+        &mango_cache_data.root_bank_cache[USDC_TOKEN_INDEX],
+        USDC_TOKEN_INDEX,
+    )?;
+    Ok(usdc_balance + spot_token_balance * spot_token_price)
+}
+
+pub fn calculate_token_price<'info>(
+    strategy_token_mint: &Account<'info, Mint>,
+    tvl: I80F48,
+) -> Result<I80F48, MangoError> {
+    let total_supply = I80F48::from_num(strategy_token_mint.supply);
+    if total_supply == I80F48::ZERO {
+        return Ok(I80F48::ONE);
+    }
+    Ok(tvl
+        .checked_div(total_supply)
+        .expect("tvl / total_supply failed"))
 }
