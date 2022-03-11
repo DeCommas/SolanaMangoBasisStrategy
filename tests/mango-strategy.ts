@@ -165,6 +165,7 @@ describe('mango-strategy', () => {
         tokenProgram: TOKEN_PROGRAM_ID,
       },
       remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }],
+      signers: [owner],
     });
     const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
     assert((usdcBalanceBefore.toNumber() - balanceAfter.toNumber()) == depositAmount, "Invalid balance change after deposit");
@@ -340,7 +341,8 @@ describe('mango-strategy', () => {
         strategyTokenAccount: strategyTokenAccount.address,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
-      }
+      },
+      signers: [owner],
     });
 
     const strategyTokenBalanceAfter = (await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
