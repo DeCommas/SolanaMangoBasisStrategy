@@ -97,7 +97,7 @@ describe('mango-strategy', () => {
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: SYSVAR_RENT_PUBKEY
       },
-      signers: [owner],
+      signers: [owner, strategyId],
     });
     await program.rpc.setLimits(bumps, new BN(depositAmount + 1_000000), [owner.publicKey], {
       accounts: {
@@ -239,7 +239,7 @@ describe('mango-strategy', () => {
       [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
     );
-    const [mangoAccount, mangoBump] = await PublicKey.findProgramAddress(
+    const [mangoAccount, _mangoBump] = await PublicKey.findProgramAddress(
       [
         (mangoGroup as PublicKey).toBytes(),
         strategyAccount.toBytes(),

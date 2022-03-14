@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 
 use anchor_lang::{
-    prelude::{Account, AccountInfo, ProgramError, ProgramResult},
+    prelude::{Account, AccountInfo, ProgramError, Result},
     Key, ToAccountMetas,
 };
 use anchor_spl::token::Mint;
@@ -39,7 +39,7 @@ pub fn create_account<'info>(
     system_program: &AccountInfo<'info>,
     seeds: &[&[&[u8]]],
     account_num: u64,
-) -> ProgramResult {
+) -> Result<()> {
     let instruction = create_mango_account(
         &mango_program.key(),
         &mango_group.key(),
@@ -76,7 +76,7 @@ pub fn create_open_orders<'info>(
     payer: &AccountInfo<'info>,
     system_program: &AccountInfo<'info>,
     seeds: &[&[&[u8]]],
-) -> ProgramResult {
+) -> Result<()> {
     let instruction = create_spot_open_orders(
         &mango_program.key(),
         &mango_group.key(),
@@ -120,7 +120,7 @@ pub fn deposit_tokens<'info>(
     token_account: &AccountInfo<'info>,
     seeds: &[&[&[u8]]],
     amount: u64,
-) -> ProgramResult {
+) -> Result<()> {
     let instruction = deposit(
         &mango_program.key(),
         &mango_group.key(),
@@ -169,7 +169,7 @@ pub fn withdraw_tokens<'info>(
     seeds: &[&[&[u8]]],
     amount: u64,
     market_index: usize,
-) -> ProgramResult {
+) -> Result<()> {
     let mut mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
     mango_spot_open_orders[market_index] = spot_open_orders.key();
     let instruction = withdraw(
@@ -213,7 +213,7 @@ pub fn withdraw_tokens<'info>(
 pub fn get_price<'info>(
     mango_cache: &AccountInfo<'info>,
     market_index: usize,
-) -> Result<I80F48, ProgramError> {
+) -> std::result::Result<I80F48, ProgramError> {
     let cache: MangoCache = *MangoCache::load_from_bytes(&mango_cache.data.borrow())?;
     Ok(cache.get_price(market_index))
 }
@@ -234,7 +234,7 @@ pub fn adjust_position_perp<'info>(
     amount_base: i64,
     market_index: usize,
     reduce_only: bool,
-) -> ProgramResult {
+) -> Result<()> {
     let mut mango_spot_open_orders = ["11111111111111111111111111111111".parse().unwrap(); 15];
     mango_spot_open_orders[market_index] = spot_open_orders.key();
     let instruction = place_perp_order(
@@ -326,7 +326,7 @@ pub fn adjust_position_spot<'info>(
     side: SerumSide,
     amount: u64,
     market_lot_size: u64,
-) -> ProgramResult {
+) -> Result<()> {
     let price = match side {
         SerumSide::Bid => 100000000000 * market_lot_size,
         SerumSide::Ask => 1 * market_lot_size,
@@ -397,7 +397,7 @@ pub fn calculate_tvl<'info>(
     mango_account: &AccountInfo<'info>,
     mango_cache: &AccountInfo<'info>,
     market_info: &MarketInfo,
-) -> Result<I80F48, MangoError> {
+) -> std::result::Result<I80F48, MangoError> {
     let mango_account =
         MangoAccount::load_checked(mango_account, &mango_program.key(), &mango_group.key())?;
     let mango_group_data = MangoGroup::load_checked(mango_group, &mango_program.key())?;
@@ -418,7 +418,7 @@ pub fn calculate_tvl<'info>(
 pub fn calculate_token_price<'info>(
     strategy_token_mint: &Account<'info, Mint>,
     tvl: I80F48,
-) -> Result<I80F48, MangoError> {
+) -> std::result::Result<I80F48, MangoError> {
     let total_supply = I80F48::from_num(strategy_token_mint.supply);
     if total_supply == I80F48::ZERO {
         return Ok(I80F48::ONE);

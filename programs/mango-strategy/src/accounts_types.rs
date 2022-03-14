@@ -8,6 +8,7 @@ pub struct Initialize<'info> {
     #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
+    #[account(signer)]
     pub strategy_id: AccountInfo<'info>,
 
     pub trigger_server: AccountInfo<'info>,
@@ -71,7 +72,7 @@ pub struct Initialize<'info> {
 pub struct Deposit<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(mut, signer)]
+    #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -132,7 +133,7 @@ pub struct Deposit<'info> {
 pub struct Withdraw<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(mut, signer)]
+    #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -298,7 +299,7 @@ pub struct AdjustPositionSpot<'info> {
 pub struct SetLimits<'info> {
     pub strategy_id: AccountInfo<'info>,
 
-    #[account(signer, address = strategy_account.owner)]
+    #[account(signer, mut, address = strategy_account.owner)]
     pub owner: AccountInfo<'info>,
 
     #[account(

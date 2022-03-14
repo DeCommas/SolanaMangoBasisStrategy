@@ -16,8 +16,8 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.21"
-anchor-spl = "0.21"
+anchor-lang = "0.22"
+anchor-spl = "0.22"
 solana-program = "1.9.5"
 mango = { path = "../../mango-v3/program", features = ["no-entrypoint"] }
 mango-common = { path = "../../mango-v3/common" }

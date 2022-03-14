@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use mango::error::MangoError;
 pub mod accounts_types;
 pub mod mango_util;
 use crate::accounts_types::*;
@@ -8,12 +9,13 @@ use fixed::types::I80F48;
 pub use mango;
 pub use mango_common;
 
-declare_id!("J8heqiEwQJs265mrMiCXjCZdDy8xAqNpBoyBRbnV3wmy");
+declare_id!("54fQPsLZf36ULUUXcbEEXd9GFwjsJh1a2upF3qCTc8gU");
 
 #[program]
 pub mod mango_strategy {
     use anchor_spl::token::{burn, mint_to, Burn, MintTo};
     use az::CheckedCast;
+    use solana_program::entrypoint::ProgramResult;
 
     use crate::mango_util::calculate_tvl;
 
@@ -76,20 +78,21 @@ pub mod mango_strategy {
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<Deposit>, bumps: Bumps, vault_token_amount: u64) -> ProgramResult {
+    pub fn deposit(ctx: Context<Deposit>, bumps: Bumps, vault_token_amount: u64) -> Result<()> {
         let tvl = calculate_tvl(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account,
             &ctx.accounts.mango_cache,
             &ctx.accounts.strategy_account.market_info,
-        )?;
+        )
+        .map_err(ErrorCode::register_mango_error)?;
         if let Some(limits_account) = ctx.accounts.strategy_account.limits_account {
             let limits_account = ctx
                 .remaining_accounts
                 .iter()
                 .find(|acc| acc.key() == limits_account)
-                .ok_or_else(|| ErrorCode::InvalidLimitsAccount)?;
+                .ok_or(ErrorCode::InvalidLimitsAccount)?;
             let limits_account: LimitsAccount =
                 LimitsAccount::try_deserialize(&mut &limits_account.data.borrow_mut()[..])
                     .map_err(|_| ErrorCode::InvalidLimitsAccount)?;
@@ -104,7 +107,8 @@ pub mod mango_strategy {
                 return Err(ErrorCode::NotInWhitelist.into());
             }
         }
-        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)?;
+        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)
+            .map_err(ErrorCode::register_mango_error)?;
         let strategy_token_amount = I80F48::from_num(vault_token_amount) / token_price;
         let accounts = Transfer {
             authority: ctx.accounts.owner.clone(),
@@ -163,15 +167,17 @@ pub mod mango_strategy {
         ctx: Context<Withdraw>,
         bumps: Bumps,
         strategy_token_amount: u64,
-    ) -> ProgramResult {
+    ) -> Result<()> {
         let tvl = calculate_tvl(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account,
             &ctx.accounts.mango_cache,
             &ctx.accounts.strategy_account.market_info,
-        )?;
-        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)?;
+        )
+        .map_err(ErrorCode::register_mango_error)?;
+        let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)
+            .map_err(ErrorCode::register_mango_error)?;
         let vault_token_amount = I80F48::from_num(strategy_token_amount) * token_price;
         mango_util::withdraw_tokens(
             &ctx.accounts.mango_program,
@@ -323,12 +329,20 @@ pub struct MarketInfo {
     pub spot_token_index: u8,
 }
 
-#[error]
+#[error_code]
 pub enum ErrorCode {
-    InvalidAccount,
     InvalidLimitsAccount,
     #[msg("Maximum TVL limit reached")]
     TvlLimitReached,
     #[msg("Signer account not in whitelist")]
     NotInWhitelist,
+    #[msg("Mango error")]
+    MangoError,
+}
+
+impl ErrorCode {
+    pub fn register_mango_error(e: MangoError) -> Self {
+        solana_program::log::sol_log(&format!("Mango error: {}", e));
+        ErrorCode::MangoError
+    }
 }
