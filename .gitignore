@@ -1,0 +1,10 @@
+
+*.sh
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+*.lock
+key.json

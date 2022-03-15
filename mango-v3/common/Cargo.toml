@@ -1,0 +1,8 @@
+[package]
+name = "mango-common"
+version = "3.0.0"
+edition = "2018"
+
+[dependencies]
+solana-program = "^1.8.0"
+bytemuck = "^1.7.2"

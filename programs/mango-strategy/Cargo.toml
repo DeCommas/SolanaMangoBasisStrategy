@@ -1,0 +1,29 @@
+[package]
+name = "mango-strategy"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mango_strategy"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.22"
+anchor-spl = "0.22"
+solana-program = "1.9.5"
+mango = { path = "../../mango-v3/program", features = ["no-entrypoint"] }
+mango-common = { path = "../../mango-v3/common" }
+serum_dex = { version = "0.4.0", git = "https://github.com/blockworks-foundation/serum-dex.git", default-features = false, features = [
+    "no-entrypoint",
+    "program",
+] }
+fixed = "1.9.0"
+az = "1.2.0"
