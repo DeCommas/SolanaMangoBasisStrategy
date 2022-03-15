@@ -9,7 +9,7 @@ use fixed::types::I80F48;
 pub use mango;
 pub use mango_common;
 
-declare_id!("54fQPsLZf36ULUUXcbEEXd9GFwjsJh1a2upF3qCTc8gU");
+declare_id!("D9X85yxEWVK3CzxdpgQT8D5X1tP3Vb4vEcQrLwPiYJf3");
 
 #[program]
 pub mod mango_strategy {
@@ -34,7 +34,7 @@ pub mod mango_strategy {
         market_info: MarketInfo,
         limits_account: Option<Pubkey>,
     ) -> ProgramResult {
-        ctx.accounts.strategy_account.owner = ctx.accounts.owner.key();
+        ctx.accounts.strategy_account.owner = ctx.accounts.deployer.key();
         ctx.accounts.strategy_account.trigger_server_pk = ctx.accounts.trigger_server.key();
         ctx.accounts.strategy_account.vault_token_mint = ctx.accounts.vault_token_mint.key();
         ctx.accounts.strategy_account.mango_program = ctx.accounts.mango_program.key();
@@ -48,7 +48,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account.to_account_info(),
             &ctx.accounts.strategy_account.to_account_info(),
-            &ctx.accounts.owner,
+            &ctx.accounts.deployer,
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),
@@ -67,7 +67,7 @@ pub mod mango_strategy {
             &ctx.accounts.spot_open_orders,
             &ctx.accounts.spot_market,
             &ctx.accounts.mango_signer,
-            &ctx.accounts.owner,
+            &ctx.accounts.deployer,
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),

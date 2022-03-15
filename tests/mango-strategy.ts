@@ -3,7 +3,7 @@ import * as anchor from '@project-serum/anchor';
 import { Program, BN } from '@project-serum/anchor';
 import { MangoStrategy } from '../target/types/mango_strategy';
 import { SystemProgram, SYSVAR_RENT_PUBKEY, PublicKey } from '@solana/web3.js';
-import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getOrCreateAssociatedTokenAccount } from '@solana/spl-token';
 import { utf8 } from '@project-serum/anchor/dist/cjs/utils/bytes';
 describe('mango-strategy', () => {
 
@@ -26,7 +26,6 @@ describe('mango-strategy', () => {
   const spotMarket = new PublicKey("BkAraCyL9TTLbeMY3L1VWrPcv32DvSi5QDDQjik1J6Ac");
 
   const devnetUsdc = new PublicKey("8FRFC6MoGGkMFQwngccyu69VnYbzykGeez7ignHVAFSN");
-  const usdc_token = new Token(anchor.getProvider().connection, devnetUsdc, TOKEN_PROGRAM_ID, owner);
 
   const positionSize = 15; // 0.015 ETH
 
@@ -79,7 +78,7 @@ describe('mango-strategy', () => {
     };
     await program.rpc.initialize(bumps, marketInfo, null, {
       accounts: {
-        owner: owner.publicKey,
+        deployer: owner.publicKey,
         strategyId: strategyId.publicKey,
         triggerServer: triggerServer.publicKey,
         strategyAccount,
@@ -137,13 +136,12 @@ describe('mango-strategy', () => {
       strategyAccountBump,
     };
 
-    const strategy_token = new Token(anchor.getProvider().connection, strategyTokenMint, TOKEN_PROGRAM_ID, owner);
-    const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const strategyTokenAccount = await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, strategyTokenMint, owner.publicKey);
     const strategyTokenBalanceBefore = strategyTokenAccount.amount;
 
-    const usdcTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const usdcTokenAccount = await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, devnetUsdc, owner.publicKey);
     const usdcBalanceBefore = usdcTokenAccount.amount;
-    assert(usdcBalanceBefore.toNumber() >= depositAmount, "Account balance < 100 USDC");
+    assert(usdcBalanceBefore >= depositAmount, "Account balance < 100 USDC");
 
 
     await program.rpc.deposit(bumps, new anchor.BN(depositAmount), {
@@ -167,12 +165,12 @@ describe('mango-strategy', () => {
       remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }],
       signers: [owner],
     });
-    const balanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    assert((usdcBalanceBefore.toNumber() - balanceAfter.toNumber()) == depositAmount, "Invalid balance change after deposit");
+    const balanceAfter = (await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, devnetUsdc, owner.publicKey)).amount;
+    assert((usdcBalanceBefore - balanceAfter) == BigInt(depositAmount), "Invalid balance change after deposit");
 
-    const strategyTokenBalanceAfter = (await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    const received = strategyTokenBalanceAfter.toNumber() - strategyTokenBalanceBefore.toNumber();
-    console.log("Received", received / Math.pow(10, (await strategy_token.getMintInfo()).decimals), "strategy tokens");
+    const strategyTokenBalanceAfter = (await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, strategyTokenMint, owner.publicKey)).amount;
+    const received = strategyTokenBalanceAfter - strategyTokenBalanceBefore;
+    console.log("Received", received / BigInt(1_000000), "strategy tokens");
   });
 
   it('Adjust position spot', async () => {
@@ -313,16 +311,15 @@ describe('mango-strategy', () => {
       strategyAccountBump
     };
 
-    const usdcTokenAccount = await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
-    const strategy_token = new Token(anchor.getProvider().connection, strategyTokenMint, TOKEN_PROGRAM_ID, owner);
-    const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey);
+    const usdcTokenAccount = await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, devnetUsdc, owner.publicKey);
+    const strategyTokenAccount = await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, strategyTokenMint, owner.publicKey);
 
     const strategyTokenBalanceBefore = strategyTokenAccount.amount;
     const usdcBalanceBefore = usdcTokenAccount.amount;
 
-    const WITHDRAW_AMOUNT = 10_000000;
+    const withdrawAmount = 10_000000;
 
-    await program.rpc.withdraw(bumps, new anchor.BN(WITHDRAW_AMOUNT), {
+    await program.rpc.withdraw(bumps, new anchor.BN(withdrawAmount), {
       accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
@@ -345,11 +342,11 @@ describe('mango-strategy', () => {
       signers: [owner],
     });
 
-    const strategyTokenBalanceAfter = (await strategy_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    const usdcBalanceAfter = (await usdc_token.getOrCreateAssociatedAccountInfo(owner.publicKey)).amount;
-    console.log("Received", (usdcBalanceAfter.toNumber() - usdcBalanceBefore.toNumber()) / Math.pow(10, 6), "USDC");
+    const strategyTokenBalanceAfter = (await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, strategyTokenMint, owner.publicKey)).amount;
+    const usdcBalanceAfter = (await await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, devnetUsdc, owner.publicKey)).amount;
+    console.log("Received", ((usdcBalanceAfter - usdcBalanceBefore) / BigInt(1_000000)), "USDC");
     assert(
-      (strategyTokenBalanceBefore.toNumber() - strategyTokenBalanceAfter.toNumber()) == WITHDRAW_AMOUNT,
+      (strategyTokenBalanceBefore - strategyTokenBalanceAfter) == BigInt(withdrawAmount),
       "Invalid token balance change after withdraw"
     );
   });

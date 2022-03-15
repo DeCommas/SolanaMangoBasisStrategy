@@ -5,56 +5,66 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct Initialize<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, mut)]
-    pub owner: AccountInfo<'info>,
+    pub deployer: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer)]
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub trigger_server: AccountInfo<'info>,
 
     #[account(
         init,
         seeds=[strategy_id.key().as_ref(), mango_strategy::STRATEGY_ACCOUNT_PDA_SEED],
         bump,
-        payer = owner,
+        payer = deployer,
         space = StrategyAccount::LEN
     )]
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    /// CHECK: mango account
     pub mango_program: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_group: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)] // Mango checks for correct PDA
     pub mango_account: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_signer: AccountInfo<'info>,
 
     // Spot
+    /// CHECK: mango account
     pub serum_dex: AccountInfo<'info>,
+    /// CHECK: mango account
     pub spot_market: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_open_orders: AccountInfo<'info>,
 
-    // Vault
+    /// Vault
     pub vault_token_mint: Box<Account<'info, Mint>>,
     #[account(
         init,
         seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
         bump,
-        payer = owner,
+        payer = deployer,
         token::mint = vault_token_mint,
         token::authority = strategy_account,
     )]
     pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
-    // Strategy token
+    /// Strategy token
     #[account(
         init,
-        payer = owner,
+        payer = deployer,
         seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
         bump,
         mint::decimals = mango_strategy::STRATEGY_TOKEN_DECIMALS,
@@ -64,14 +74,16 @@ pub struct Initialize<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: AccountInfo<'info>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct Deposit<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
@@ -82,23 +94,30 @@ pub struct Deposit<'info> {
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    /// CHECK: mango account
     #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)] // Mango checks for correct PDA
     pub mango_account: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_cache: AccountInfo<'info>,
+    /// CHECK: mango account
     pub mango_root_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_node_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_vault: AccountInfo<'info>,
 
-    // Vault (mango does not allow direct deposit from token accounts not owned by signer)
+    /// Vault (mango does not allow direct deposit from token accounts not owned by signer)
     #[account(
         mut,
         seeds=[strategy_id.key().as_ref(), mango_strategy::VAULT_PDA_SEED],
@@ -106,7 +125,7 @@ pub struct Deposit<'info> {
     )]
     pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
-    // Deposit token
+    /// Deposit token
     #[account(
         mut,
         has_one = owner,
@@ -114,7 +133,7 @@ pub struct Deposit<'info> {
     )]
     pub deposit_token_account: Box<Account<'info, TokenAccount>>,
 
-    // Strategy token
+    /// Strategy token
     #[account(
         mut,
         seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
@@ -131,8 +150,10 @@ pub struct Deposit<'info> {
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct Withdraw<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, mut)]
     pub owner: AccountInfo<'info>,
 
@@ -143,28 +164,37 @@ pub struct Withdraw<'info> {
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    /// CHECK: mango account
     #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)] // Mango already checks for correct PDA
     pub mango_account: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_cache: AccountInfo<'info>,
+    /// CHECK: mango account
     pub mango_root_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_node_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_vault: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_signer: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_open_orders: AccountInfo<'info>,
 
-    // Withdraw token
+    /// Withdraw token
     #[account(
         mut,
         has_one = owner,
@@ -172,7 +202,7 @@ pub struct Withdraw<'info> {
     )]
     pub withdraw_token_account: Box<Account<'info, TokenAccount>>,
 
-    // Strategy token
+    /// Strategy token
     #[account(
         mut,
         seeds=[strategy_id.key().as_ref(), mango_strategy::MINT_PDA_SEED],
@@ -190,8 +220,10 @@ pub struct Withdraw<'info> {
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct AdjustPositionPerp<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
@@ -202,31 +234,44 @@ pub struct AdjustPositionPerp<'info> {
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    /// CHECK: mango account
     #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)] // Mango checks for correct PDA
     pub mango_account: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_cache: AccountInfo<'info>,
+    /// CHECK: mango account
     pub mango_root_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_node_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_vault: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_market: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_asks: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_bids: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub mango_event_queue: AccountInfo<'info>,
+    /// CHECK: mango account
     pub mango_signer: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub spot_open_orders: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
@@ -236,8 +281,10 @@ pub struct AdjustPositionPerp<'info> {
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct AdjustPositionSpot<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, address = strategy_account.trigger_server_pk)]
     pub trigger_server: AccountInfo<'info>,
 
@@ -248,47 +295,69 @@ pub struct AdjustPositionSpot<'info> {
     pub strategy_account: Box<Account<'info, StrategyAccount>>,
 
     // Mango
+    /// CHECK: mango account
     #[account(address = strategy_account.mango_program)]
     pub mango_program: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut, address = strategy_account.mango_group)]
     pub mango_group: AccountInfo<'info>,
 
+    /// CHECK: mango account
     #[account(mut)] // Mango checks for correct PDA
     pub mango_account: AccountInfo<'info>,
 
+    /// CHECK: mango account
     pub mango_cache: AccountInfo<'info>,
+    /// CHECK: mango account
     pub mango_signer: AccountInfo<'info>,
 
     // Spot
+    /// CHECK: mango account
     pub serum_dex: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_market: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_open_orders: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_asks: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_bids: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_request_queue: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_event_queue: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_base: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_quote: AccountInfo<'info>,
+    /// CHECK: mango account
     pub spot_base_root_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_base_node_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_base_vault: AccountInfo<'info>,
+    /// CHECK: mango account
     pub spot_quote_root_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_quote_node_bank: AccountInfo<'info>,
+    /// CHECK: mango account
     #[account(mut)]
     pub spot_quote_vault: AccountInfo<'info>,
+    /// CHECK: mango account
     pub serum_dex_signer: AccountInfo<'info>,
+    /// CHECK: mango account
     pub srm_vault: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
@@ -297,8 +366,10 @@ pub struct AdjustPositionSpot<'info> {
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct SetLimits<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, mut, address = strategy_account.owner)]
     pub owner: AccountInfo<'info>,
 
@@ -324,8 +395,10 @@ pub struct SetLimits<'info> {
 #[derive(Accounts)]
 #[instruction(bumps: Bumps)]
 pub struct DropLimits<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
     pub strategy_id: AccountInfo<'info>,
 
+    /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(signer, address = strategy_account.owner)]
     pub owner: AccountInfo<'info>,
 
@@ -354,7 +427,8 @@ pub struct Bumps {
 #[account]
 #[derive(Debug)]
 pub struct StrategyAccount {
-    pub owner: Pubkey, // Owner can only change limits
+    /// Owner can only change limits
+    pub owner: Pubkey,
     pub trigger_server_pk: Pubkey,
     pub vault_token_mint: Pubkey,
     pub mango_program: Pubkey,

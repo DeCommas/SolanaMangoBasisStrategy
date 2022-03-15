@@ -1,10 +1,8 @@
-Одна программа может обслуживать несколько стратегий, каждая стратегия определяется адресом strategyId.
+Single program can serve several strategies, a strategy instance is identified by strategyId.
 
-Из strategyId генерируются другие адреса.
+### PDA
 
-### PDA адреса
-
-Генерация strategyAccount:
+#### strategyAccount:
 
 ```
 import { PublicKey } from '@solana/web3.js';
@@ -17,10 +15,10 @@ const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddres
 
 const bumps = {
     strategyAccountBump
-}; // bumps передается первым аргументом при вызове методов и используется для верификации адресов уже на стороне программы
+}; // bumps is used for verification
 ```
 
-Генерация mangoAccount:
+#### mangoAccount:
 
 ```
 const [mangoAccount, _] = await PublicKey.findProgramAddress(
@@ -33,7 +31,7 @@ const [mangoAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Генерация vaultTokenAccount:
+#### vaultTokenAccount:
 
 ```
 const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
@@ -42,7 +40,7 @@ const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Генерация strategyTokenMint:
+#### strategyTokenMint:
 
 ```
 const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
@@ -51,37 +49,22 @@ const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-### Токены
-
-Для USDC:
+### Tokens
 
 ```
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-...
-const usdc = new Token(<connection>, USDC_MINT, TOKEN_PROGRAM_ID, user_wallet);
-const depositTokenAccount = await usdc.getOrCreateAssociatedAccountInfo(
-    user_wallet.publicKey
-);
-```
-
-Для токена стратегии:
-
-```
-const strategy_token = new Token(<connection>, strategyTokenMint, TOKEN_PROGRAM_ID, user_wallet);
-const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(
-    user_wallet.publicKey
-);
+const strategyTokenAccount = await getOrCreateAssociatedTokenAccount(connection, owner, strategyTokenMint, owner.publicKey);
+const usdcTokenAccount = await getOrCreateAssociatedTokenAccount(connection, owner, usdcMint, owner.publicKey);
 ```
 
 ### Deposit
 
-Адреса:
+Accounts:
 
-- owner: основной кошелек, с которого происходит депозит (он же подписывает транзакцию)
+- owner: strategy token buyer
 
-- strategyId: стратегия
+- strategyId: strategy instance id
 
-- strategyAccount: аккаунт данных стратегии (генерируемый)
+- strategyAccount: strategy data
 
 - mangoProgram,
 
@@ -97,55 +80,56 @@ const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountIn
 
 - mangoVault,
 
-- vaultTokenAccount: промежуточный аккаунт для приема USDC, тк манго на прямую не принимает от чужих адресов
+- vaultTokenAccount: intermediate USDC account, since mango does not allow direct deposit (pda)
 
-- depositTokenAccount: токен-аккаунт с USDC пользователя
+- depositTokenAccount: USDC associated account
 
-- strategyTokenMint: минт-адрес токена стратегии
+- strategyTokenMint: mint address of strategy token (pda)
 
-- strategyTokenAccount: токен-аккаунт для получения токенов стратегии
+- strategyTokenAccount: strategy token associated account
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
-Пример вызова:
+Example:
 
 ```
 import { BN } from '@project-serum/anchor';
 ...
 const amount = 10_000000; // 10 USDC
-await program.rpc.deposit(bumps, new BN(amount), {
+await program.rpc.deposit(bumps, new anchor.BN(depositAmount), {
       accounts: {
-        owner: userAccount,
-        strategyId: strategyId,
-        strategyAccount, // генерируется
-        mangoProgram: MANGO_PROGRAM,
-        mangoGroup: MANGO_GROUP,
-        mangoAccount, // генерируется
-        mangoCache: MANGO_CACHE,
-        mangoRootBank: MANGO_ROOT_BANK,
-        mangoNodeBank: MANGO_NODE_BANK,
-        mangoVault: MANGO_VAULT,
-        vaultTokenAccount, // генерируется
+        owner,
+        strategyId,
+        strategyAccount,
+        mangoProgram,
+        mangoGroup,
+        mangoAccount,
+        mangoCache,
+        mangoRootBank,
+        mangoNodeBank,
+        mangoVault,
+        vaultTokenAccount,
         depositTokenAccount,
-        strategyTokenMint, // генерируется
+        strategyTokenMint,
         strategyTokenAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
       },
-      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: LIMITS_ACCOUNT }],
+      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }], // optional
+      signers: [owner],
 });
 ```
 
-LIMITS_ACCOUNT - опциональный аккаунт где записаны whitelist и max_tvl
+LIMITS_ACCOUNT - optional whitelist & max_tvl
 
 ### Withdraw
 
-Адреса:
+Accounts:
 
-- owner: основной кошелек, с которого происходит депозит (он же подписывает транзакцию)
+- owner: strategy token buyer
 
-- strategyId: стратегия
+- strategyId: strategy instance id
 
-- strategyAccount: аккаунт данных стратегии (генерируемый)
+- strategyAccount: strategy data
 
 - mangoProgram,
 
@@ -163,19 +147,19 @@ LIMITS_ACCOUNT - опциональный аккаунт где записаны
 
 - mangoSigner,
 
-- spotOpenOrders, // генерируется
+- spotOpenOrders, // pda
 
-- withdrawTokenAccount: токен-аккаунт для вывода USDC,
+- withdrawTokenAccount: USDC associated account,
 
-- strategyTokenMint, // генерируется
+- strategyTokenMint, // pda
 
-- strategyTokenAccount: токен-аккаунт с которого продавать токены стратегии,
+- strategyTokenAccount: strategy token associated account,
 
 - systemProgram: SystemProgram.programId, // import { SystemProgram } from '@solana/web3.js';
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/web3.js';
 
-Пример вызова:
+Example:
 
 ```
 import { BN } from '@project-serum/anchor';
@@ -192,8 +176,8 @@ const [spotOpenOrders, _] = await PublicKey.findProgramAddress(
     MANGO_PROGRAM
 );
 
-await program.rpc.withdraw(bumps, new BN(withdrawAmount), {
-    accounts: {
+await program.rpc.withdraw(bumps, new anchor.BN(withdrawAmount), {
+      accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         strategyAccount,
@@ -209,8 +193,9 @@ await program.rpc.withdraw(bumps, new BN(withdrawAmount), {
         withdrawTokenAccount,
         strategyTokenMint,
         strategyTokenAccount,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-    }
+        systemProgram,
+        tokenProgram,
+      },
+      signers: [owner],
 });
 ```
