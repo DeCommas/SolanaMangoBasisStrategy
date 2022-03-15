@@ -1,10 +1,10 @@
-Single program can serve several strategies, each strategy identifies by strategyId.
+Одна программа может обслуживать несколько стратегий, каждая стратегия определяется адресом strategyId.
 
-Other addresses are generated from strategyId.
+Из strategyId генерируются другие адреса.
 
-### PDA addresses
+### PDA адреса
 
-Generate strategyAccount:
+Генерация strategyAccount:
 
 ```
 import { PublicKey } from '@solana/web3.js';
@@ -20,7 +20,7 @@ const bumps = {
 }; // bumps передается первым аргументом при вызове методов и используется для верификации адресов уже на стороне программы
 ```
 
-Generate mangoAccount:
+Генерация mangoAccount:
 
 ```
 const [mangoAccount, _] = await PublicKey.findProgramAddress(
@@ -33,7 +33,7 @@ const [mangoAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Generate vaultTokenAccount:
+Генерация vaultTokenAccount:
 
 ```
 const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
@@ -42,7 +42,7 @@ const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Gerenate strategyTokenMint:
+Генерация strategyTokenMint:
 
 ```
 const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
@@ -51,9 +51,9 @@ const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-### Tokens
+### Токены
 
-For USDC:
+Для USDC:
 
 ```
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
@@ -64,7 +64,7 @@ const depositTokenAccount = await usdc.getOrCreateAssociatedAccountInfo(
 );
 ```
 
-For strategy token:
+Для токена стратегии:
 
 ```
 const strategy_token = new Token(<connection>, strategyTokenMint, TOKEN_PROGRAM_ID, user_wallet);
@@ -75,13 +75,13 @@ const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountIn
 
 ### Deposit
 
-Addresses:
+Адреса:
 
-- owner: main wallet with strategy assets (and signer as-well)
+- owner: основной кошелек, с которого происходит депозит (он же подписывает транзакцию)
 
-- strategyId: strategy
+- strategyId: стратегия
 
-- strategyAccount: strategy data account (generated)
+- strategyAccount: аккаунт данных стратегии (генерируемый)
 
 - mangoProgram,
 
@@ -97,17 +97,17 @@ Addresses:
 
 - mangoVault,
 
-- vaultTokenAccount: intermidiate account for USDC, needed as Mango won't accept asstets from external addresses
+- vaultTokenAccount: промежуточный аккаунт для приема USDC, тк манго на прямую не принимает от чужих адресов
 
-- depositTokenAccount: token acount with user's USDC
+- depositTokenAccount: токен-аккаунт с USDC пользователя
 
-- strategyTokenMint: strategy token mint address
+- strategyTokenMint: минт-адрес токена стратегии
 
-- strategyTokenAccount: token account to get strategy token
+- strategyTokenAccount: токен-аккаунт для получения токенов стратегии
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
-Example call:
+Пример вызова:
 
 ```
 import { BN } from '@project-serum/anchor';
@@ -135,17 +135,17 @@ await program.rpc.deposit(bumps, new BN(amount), {
 });
 ```
 
-LIMITS_ACCOUNT - optianal account with allowlist and max_tvl
+LIMITS_ACCOUNT - опциональный аккаунт где записаны whitelist и max_tvl
 
 ### Withdraw
 
-Adresses:
+Адреса:
 
-- owner: main wallet with strategy assets (and signer as-well)
+- owner: основной кошелек, с которого происходит депозит (он же подписывает транзакцию)
 
-- strategyId: strategy
+- strategyId: стратегия
 
-- strategyAccount: strategy data account (generated)
+- strategyAccount: аккаунт данных стратегии (генерируемый)
 
 - mangoProgram,
 
@@ -163,19 +163,19 @@ Adresses:
 
 - mangoSigner,
 
-- spotOpenOrders, // generated
+- spotOpenOrders, // генерируется
 
-- withdrawTokenAccount: token account to call USDC,
+- withdrawTokenAccount: токен-аккаунт для вывода USDC,
 
-- strategyTokenMint, // generated
+- strategyTokenMint, // генерируется
 
-- strategyTokenAccount: token account for selling strategy token,
+- strategyTokenAccount: токен-аккаунт с которого продавать токены стратегии,
 
 - systemProgram: SystemProgram.programId, // import { SystemProgram } from '@solana/web3.js';
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/web3.js';
 
-Example call:
+Пример вызова:
 
 ```
 import { BN } from '@project-serum/anchor';
