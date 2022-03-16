@@ -98,7 +98,7 @@ describe('mango-strategy', () => {
       },
       signers: [owner, strategyId],
     });
-    await program.rpc.setLimits(bumps, new BN(depositAmount + 1_000000), [owner.publicKey], {
+    /*await program.rpc.setLimits(bumps, new BN(depositAmount + 1_000000), [owner.publicKey], {
       accounts: {
         strategyId: strategyId.publicKey,
         owner: owner.publicKey,
@@ -107,7 +107,7 @@ describe('mango-strategy', () => {
         systemProgram: SystemProgram.programId,
       },
       signers: [owner, limitsAccount],
-    });
+    });*/
   });
 
   it('Deposit', async () => {
