@@ -31,7 +31,7 @@ describe('mango-strategy', () => {
 
   const depositAmount = 80_000000; // 80 USDC
 
-  const limitsAccount = anchor.web3.Keypair.generate();
+  const limitsAccount = anchor.web3.Keypair.fromSecretKey(Uint8Array.from([174, 34, 158, 36, 199, 123, 196, 80, 115, 38, 105, 66, 230, 66, 105, 29, 106, 246, 39, 61, 231, 202, 111, 157, 106, 62, 57, 150, 97, 62, 248, 37, 25, 6, 203, 18, 167, 84, 217, 3, 41, 219, 237, 39, 80, 142, 25, 193, 53, 230, 94, 46, 152, 235, 156, 184, 128, 144, 231, 125, 27, 128, 181, 232]));
 
   it('Initialize', async () => {
     const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
@@ -66,6 +66,7 @@ describe('mango-strategy', () => {
 
     console.log("Strategy id:", strategyId.publicKey.toBase58());
     console.log("Strategy account:", strategyAccount.toBase58());
+    console.log("Limits account:", limitsAccount.publicKey.toBase58());
     const bumps = {
       strategyAccountBump,
     };
@@ -98,16 +99,33 @@ describe('mango-strategy', () => {
       },
       signers: [owner, strategyId],
     });
-    /*await program.rpc.setLimits(bumps, new BN(depositAmount + 1_000000), [owner.publicKey], {
-      accounts: {
-        strategyId: strategyId.publicKey,
-        owner: owner.publicKey,
-        strategyAccount,
-        limitsAccount: limitsAccount.publicKey,
-        systemProgram: SystemProgram.programId,
-      },
-      signers: [owner, limitsAccount],
-    });*/
+    await program.rpc.setLimits(
+      bumps,
+      new BN(depositAmount + 1_000000), // max tvl
+      new BN(depositAmount + 1_000000), // max deposit
+      [{ key: owner.publicKey, deposit: new BN(0) }],
+      {
+        accounts: {
+          strategyId: strategyId.publicKey,
+          owner: owner.publicKey,
+          strategyAccount,
+          limitsAccount: limitsAccount.publicKey,
+          systemProgram: SystemProgram.programId,
+        },
+        signers: [owner, limitsAccount],
+      });
+
+    /*await program.rpc.dropLimits(
+      bumps,
+      {
+        accounts: {
+          strategyId: strategyId.publicKey,
+          owner: owner.publicKey,
+          strategyAccount,
+          limitsAccount: limitsAccount.publicKey,
+        },
+        signers: [owner],
+      });*/
   });
 
   it('Deposit', async () => {
@@ -162,7 +180,7 @@ describe('mango-strategy', () => {
         strategyTokenAccount: strategyTokenAccount.address,
         tokenProgram: TOKEN_PROGRAM_ID,
       },
-      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }],
+      remainingAccounts: [{ isSigner: false, isWritable: true, pubkey: limitsAccount.publicKey }],
       signers: [owner],
     });
     const balanceAfter = (await getOrCreateAssociatedTokenAccount(anchor.getProvider().connection, owner, devnetUsdc, owner.publicKey)).amount;
@@ -339,6 +357,7 @@ describe('mango-strategy', () => {
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
       },
+      remainingAccounts: [{ isSigner: false, isWritable: true, pubkey: limitsAccount.publicKey }],
       signers: [owner],
     });
 

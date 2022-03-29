@@ -145,6 +145,7 @@ pub struct Deposit<'info> {
     pub strategy_token_account: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+    // Optional [writable] limits account
 }
 
 #[derive(Accounts)]
@@ -215,6 +216,7 @@ pub struct Withdraw<'info> {
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+    // Optional [writable] limits account
 }
 
 #[derive(Accounts)]
@@ -382,7 +384,7 @@ pub struct SetLimits<'info> {
 
     #[account(
         signer,
-        init,
+        init_if_needed,
         payer = owner,
         space = LimitsAccount::LEN,
         constraint = strategy_account.limits_account.is_none() || strategy_account.limits_account == Some(limits_account.key()))
@@ -411,11 +413,10 @@ pub struct DropLimits<'info> {
 
     #[account(
         mut,
+        close = owner,
         constraint = strategy_account.limits_account == Some(limits_account.key()))
     ]
     pub limits_account: Box<Account<'info, LimitsAccount>>,
-
-    pub system_program: Program<'info, System>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
@@ -441,12 +442,19 @@ impl StrategyAccount {
     pub const LEN: usize = 6 * 32 + 12 + 8;
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct WhitelistLimit {
+    pub key: Pubkey,
+    pub deposit: u64,
+}
+
 #[account]
 #[derive(Debug, Default)]
 pub struct LimitsAccount {
-    // in USDC including decimals
+    /// in USDC including decimals
     pub max_tvl: Option<u64>,
-    pub whitelist: Vec<Pubkey>,
+    pub max_deposit: u64,
+    pub whitelist: Vec<WhitelistLimit>,
 }
 
 impl LimitsAccount {
