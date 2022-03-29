@@ -104,7 +104,17 @@ module.exports = async function (provider) {
     bumps,
     maxTvl,
     maxDeposit,
-    [{ key: owner.publicKey, deposit: new BN(0) }],
+    [
+      {
+        key: owner.publicKey, deposit: new BN(0)
+      },
+      {
+        key: new PublicKey("HYrDbdxtyiHotcSsWjGyce3ACwcSJB3vZr4UYExXbsKk"), deposit: new BN(0)
+      },
+      {
+        key: new PublicKey("7XbABKPhiMEp4LCGn6VB5juExzPoPssvqjr9f4gNG2Fg"), deposit: new BN(0)
+      },
+    ],
     {
       accounts: {
         strategyId: strategyId.publicKey,

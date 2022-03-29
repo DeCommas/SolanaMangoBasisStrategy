@@ -101,9 +101,19 @@ describe('mango-strategy', () => {
     });
     await program.rpc.setLimits(
       bumps,
-      new BN(depositAmount + 1_000000), // max tvl
-      new BN(depositAmount + 1_000000), // max deposit
-      [{ key: owner.publicKey, deposit: new BN(0) }],
+      new BN(50000_000000), // max tvl 50k
+      new BN(1000_000000), // max deposit 1k
+      [
+        {
+          key: owner.publicKey, deposit: new BN(0)
+        },
+        {
+          key: new PublicKey("HYrDbdxtyiHotcSsWjGyce3ACwcSJB3vZr4UYExXbsKk"), deposit: new BN(0)
+        },
+        {
+          key: new PublicKey("7XbABKPhiMEp4LCGn6VB5juExzPoPssvqjr9f4gNG2Fg"), deposit: new BN(0)
+        },
+      ],
       {
         accounts: {
           strategyId: strategyId.publicKey,
