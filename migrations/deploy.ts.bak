@@ -8,27 +8,27 @@ import { utf8 } from '@project-serum/anchor/dist/cjs/utils/bytes';
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { MangoStrategy } from '../target/types/mango_strategy';
 import { SystemProgram, SYSVAR_RENT_PUBKEY, PublicKey } from '@solana/web3.js';
-const anchor = require("@project-serum/anchor");
+import * as anchor from '@project-serum/anchor';
+import fs from 'fs';
+
+const addresses = '../addresses_testnet.json';
 
 module.exports = async function (provider) {
   // Configure client to use the provider.
   anchor.setProvider(provider);
 
-  const owner = anchor.web3.Keypair.fromSecretKey(Uint8Array.from([240, 124, 166, 108, 98, 125, 133, 177, 97, 55, 54, 194, 171, 75, 164, 19, 6, 91, 229, 174, 216, 34, 157, 176, 43, 18, 134, 159, 101, 69, 165, 40, 14, 85, 44, 224, 187, 162, 59, 160, 109, 230, 54, 88, 91, 80, 200, 155, 198, 56, 214, 198, 103, 131, 116, 145, 18, 212, 125, 132, 150, 247, 192, 178]));
+  const owner = anchor.getProvider().wallet;
 
-  const program = anchor.workspace.MangoStrategy as Program<MangoStrategy>;
-  const mangoProgram = new PublicKey("4skJ85cdxQAFVKbcGgfun8iZPL7BadVYXG3kGEGkufqA");
-  const mangoGroup = new PublicKey("Ec2enZyoC4nGpEfu2sUNAa2nUGJHWxoUWYSEJ2hNTWTA");
+  console.log("Addresses:", addresses);
+  const accounts = JSON.parse(fs.readFileSync(addresses).toString());
+
+  const mangoProgram = new PublicKey(accounts.MANGO_PROGRAM);
+  const mangoGroup = new PublicKey(accounts.MANGO_GROUP);
   const accountNum = 1;
 
   const strategyId = anchor.web3.Keypair.generate();
 
   const triggerServer = owner;
-
-  const serumDex = new PublicKey("DESVgJVGajEgKGXhb6XmqDHGz3VjdgP7rEVESBgxmroY");
-  const spotMarket = new PublicKey("BkAraCyL9TTLbeMY3L1VWrPcv32DvSi5QDDQjik1J6Ac");
-
-  const devnetUsdc = new PublicKey("8FRFC6MoGGkMFQwngccyu69VnYbzykGeez7ignHVAFSN");
 
   const maxTvl = new BN(50000_000000); // 50k
   const maxDeposit = new BN(1000_000000); // 1k
@@ -87,18 +87,18 @@ module.exports = async function (provider) {
       mangoProgram,
       mangoGroup,
       mangoAccount,
-      mangoSigner: "CFdbPXrnPLmo5Qrze7rw9ZNiD82R1VeNdoQosooSP1Ax",
-      serumDex,
-      spotMarket,
+      mangoSigner: accounts.MANGO_SIGNER,
+      serumDex: accounts.SERUM_DEX_PROGRAM,
+      spotMarket: accounts.MANGO_SPOT,
       spotOpenOrders,
-      vaultTokenMint: devnetUsdc,
+      vaultTokenMint: accounts.USDC_MINT,
       vaultTokenAccount,
       strategyTokenMint,
       systemProgram: SystemProgram.programId,
       tokenProgram: TOKEN_PROGRAM_ID,
       rent: SYSVAR_RENT_PUBKEY
     },
-    signers: [owner, strategyId],
+    signers: [strategyId],
   });
   await program.rpc.setLimits(
     bumps,
@@ -123,6 +123,6 @@ module.exports = async function (provider) {
         limitsAccount: limitsAccount.publicKey,
         systemProgram: SystemProgram.programId,
       },
-      signers: [owner, limitsAccount],
+      signers: [limitsAccount],
     });
 }
