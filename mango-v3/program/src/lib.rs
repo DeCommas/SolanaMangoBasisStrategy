@@ -12,3 +12,17 @@ pub mod utils;
 
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
+
+#[cfg(feature = "wasm32-compat")]
+fn _wasm_usize_check() {
+    unsafe {
+        std::mem::transmute::<usize, [u8; 4]>(0); // wasm32-compat feature enabled on 64bit target
+    }
+}
+
+#[cfg(not(feature = "wasm32-compat"))]
+fn _wasm_usize_check() {
+    unsafe {
+        std::mem::transmute::<usize, [u8; 8]>(0); // To build mango for wasm32 enable wasm32-compat feature
+    }
+}
