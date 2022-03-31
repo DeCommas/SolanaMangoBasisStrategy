@@ -9,12 +9,12 @@ use fixed::types::I80F48;
 pub use mango;
 pub use mango_common;
 
-declare_id!("54fQPsLZf36ULUUXcbEEXd9GFwjsJh1a2upF3qCTc8gU");
+declare_id!("7xTijPpdUgFGWDg1AM1VEJu6ndsPREsSV89jZKXhs6nf");
 
 #[program]
 pub mod mango_strategy {
     use anchor_spl::token::{burn, mint_to, Burn, MintTo};
-    use az::CheckedCast;
+    use az::{Cast, CheckedCast};
     use solana_program::entrypoint::ProgramResult;
 
     use crate::mango_util::calculate_tvl;
@@ -34,7 +34,7 @@ pub mod mango_strategy {
         market_info: MarketInfo,
         limits_account: Option<Pubkey>,
     ) -> ProgramResult {
-        ctx.accounts.strategy_account.owner = ctx.accounts.owner.key();
+        ctx.accounts.strategy_account.owner = ctx.accounts.deployer.key();
         ctx.accounts.strategy_account.trigger_server_pk = ctx.accounts.trigger_server.key();
         ctx.accounts.strategy_account.vault_token_mint = ctx.accounts.vault_token_mint.key();
         ctx.accounts.strategy_account.mango_program = ctx.accounts.mango_program.key();
@@ -48,7 +48,7 @@ pub mod mango_strategy {
             &ctx.accounts.mango_group,
             &ctx.accounts.mango_account.to_account_info(),
             &ctx.accounts.strategy_account.to_account_info(),
-            &ctx.accounts.owner,
+            &ctx.accounts.deployer,
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),
@@ -67,7 +67,7 @@ pub mod mango_strategy {
             &ctx.accounts.spot_open_orders,
             &ctx.accounts.spot_market,
             &ctx.accounts.mango_signer,
-            &ctx.accounts.owner,
+            &ctx.accounts.deployer,
             &ctx.accounts.system_program,
             &[&[
                 strategy_id.as_ref(),
@@ -88,13 +88,13 @@ pub mod mango_strategy {
         )
         .map_err(ErrorCode::register_mango_error)?;
         if let Some(limits_account) = ctx.accounts.strategy_account.limits_account {
-            let limits_account = ctx
+            let limits_account_info = ctx
                 .remaining_accounts
                 .iter()
                 .find(|acc| acc.key() == limits_account)
-                .ok_or(ErrorCode::InvalidLimitsAccount)?;
-            let limits_account: LimitsAccount =
-                LimitsAccount::try_deserialize(&mut &limits_account.data.borrow_mut()[..])
+                .ok_or(ErrorCode::InvalidLimitsAccount)?; // check limits account
+            let mut limits_account: LimitsAccount =
+                LimitsAccount::try_deserialize(&mut &limits_account_info.data.borrow_mut()[..])
                     .map_err(|_| ErrorCode::InvalidLimitsAccount)?;
             if limits_account
                 .max_tvl
@@ -103,7 +103,20 @@ pub mod mango_strategy {
             {
                 return Err(ErrorCode::TvlLimitReached.into());
             }
-            if !limits_account.whitelist.contains(&ctx.accounts.owner.key()) {
+            let limit = limits_account
+                .whitelist
+                .iter_mut()
+                .find(|x| x.key == ctx.accounts.owner.key());
+            if let Some(WhitelistLimit { deposit, .. }) = limit {
+                *deposit += vault_token_amount;
+                if *deposit > limits_account.max_deposit {
+                    return Err(ErrorCode::WhitelistLimitReached.into());
+                }
+                LimitsAccount::try_serialize(
+                    &limits_account,
+                    &mut &mut limits_account_info.data.borrow_mut()[..],
+                )?;
+            } else {
                 return Err(ErrorCode::NotInWhitelist.into());
             }
         }
@@ -179,6 +192,34 @@ pub mod mango_strategy {
         let token_price = calculate_token_price(&ctx.accounts.strategy_token_mint, tvl)
             .map_err(ErrorCode::register_mango_error)?;
         let vault_token_amount = I80F48::from_num(strategy_token_amount) * token_price;
+        if let Some(limits_account) = ctx.accounts.strategy_account.limits_account {
+            let limits_account_info = ctx
+                .remaining_accounts
+                .iter()
+                .find(|acc| acc.key() == limits_account)
+                .ok_or(ErrorCode::InvalidLimitsAccount)?; // check limits account
+            let mut limits_account: LimitsAccount =
+                LimitsAccount::try_deserialize(&mut &limits_account_info.data.borrow_mut()[..])
+                    .map_err(|_| ErrorCode::InvalidLimitsAccount)?;
+            let limit = limits_account
+                .whitelist
+                .iter_mut()
+                .find(|x| x.key == ctx.accounts.owner.key());
+            if let Some(WhitelistLimit { deposit, .. }) = limit {
+                if vault_token_amount >= *deposit {
+                    *deposit = 0;
+                } else {
+                    let vault_token_amount_u64: u64 = vault_token_amount.cast();
+                    *deposit -= vault_token_amount_u64;
+                }
+                LimitsAccount::try_serialize(
+                    &limits_account,
+                    &mut &mut limits_account_info.data.borrow_mut()[..],
+                )?;
+            } else {
+                return Err(ErrorCode::NotInWhitelist.into());
+            }
+        }
         mango_util::withdraw_tokens(
             &ctx.accounts.mango_program,
             &ctx.accounts.mango_group,
@@ -305,9 +346,11 @@ pub mod mango_strategy {
         ctx: Context<SetLimits>,
         bumps: Bumps,
         max_tvl: Option<u64>,
-        whitelist: Vec<Pubkey>,
+        max_deposit: u64,
+        whitelist: Vec<WhitelistLimit>,
     ) -> ProgramResult {
         ctx.accounts.limits_account.max_tvl = max_tvl;
+        ctx.accounts.limits_account.max_deposit = max_deposit;
         ctx.accounts.limits_account.whitelist = whitelist;
         ctx.accounts.strategy_account.limits_account = Some(ctx.accounts.limits_account.key());
         let _ = bumps; // bumps used in validation
@@ -332,11 +375,9 @@ pub struct MarketInfo {
 #[error_code]
 pub enum ErrorCode {
     InvalidLimitsAccount,
-    #[msg("Maximum TVL limit reached")]
     TvlLimitReached,
-    #[msg("Signer account not in whitelist")]
+    WhitelistLimitReached,
     NotInWhitelist,
-    #[msg("Mango error")]
     MangoError,
 }
 
