@@ -1,6 +1,9 @@
 [programs.localnet]
 mango_strategy = "54fQPsLZf36ULUUXcbEEXd9GFwjsJh1a2upF3qCTc8gU"
 
+[programs.mainnet]
+mango_strategy = "DNyxh1hUP2TmLr6mh4yHEyWNPNiZsiUh6vY3snRi9M8F"
+
 [registry]
 url = "https://anchor.projectserum.com"
 

@@ -9,7 +9,7 @@ use fixed::types::I80F48;
 pub use mango;
 pub use mango_common;
 
-declare_id!("7xTijPpdUgFGWDg1AM1VEJu6ndsPREsSV89jZKXhs6nf");
+declare_id!("DNyxh1hUP2TmLr6mh4yHEyWNPNiZsiUh6vY3snRi9M8F");
 
 #[program]
 pub mod mango_strategy {

@@ -48,6 +48,7 @@ describe('mango-strategy', () => {
   const depositAmount = 80_000000; // 80 USDC
 
   it('Initialize', async () => {
+    console.log("Program:", program.programId.toBase58());
     const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddress(
       [strategyId.publicKey.toBuffer(), utf8.encode("account")],
       program.programId
