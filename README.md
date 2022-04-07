@@ -17,10 +17,10 @@ const [strategyAccount, strategyAccountBump] = await PublicKey.findProgramAddres
 
 const bumps = {
     strategyAccountBump
-}; // bumps передается первым аргументом при вызове методов и используется для верификации адресов уже на стороне программы
+}; // bumps is used for verification
 ```
 
-Generate mangoAccount:
+#### mangoAccount:
 
 ```
 const [mangoAccount, _] = await PublicKey.findProgramAddress(
@@ -33,7 +33,7 @@ const [mangoAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Generate vaultTokenAccount:
+#### vaultTokenAccount:
 
 ```
 const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
@@ -42,7 +42,7 @@ const [vaultTokenAccount, _] = await PublicKey.findProgramAddress(
 );
 ```
 
-Gerenate strategyTokenMint:
+#### strategyTokenMint:
 
 ```
 const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
@@ -53,35 +53,20 @@ const [strategyTokenMint, _] = await PublicKey.findProgramAddress(
 
 ### Tokens
 
-For USDC:
-
 ```
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-...
-const usdc = new Token(<connection>, USDC_MINT, TOKEN_PROGRAM_ID, user_wallet);
-const depositTokenAccount = await usdc.getOrCreateAssociatedAccountInfo(
-    user_wallet.publicKey
-);
-```
-
-For strategy token:
-
-```
-const strategy_token = new Token(<connection>, strategyTokenMint, TOKEN_PROGRAM_ID, user_wallet);
-const strategyTokenAccount = await strategy_token.getOrCreateAssociatedAccountInfo(
-    user_wallet.publicKey
-);
+const strategyTokenAccount = await getOrCreateAssociatedTokenAccount(connection, owner, strategyTokenMint, owner.publicKey);
+const usdcTokenAccount = await getOrCreateAssociatedTokenAccount(connection, owner, usdcMint, owner.publicKey);
 ```
 
 ### Deposit
 
-Addresses:
+Accounts:
 
-- owner: main wallet with strategy assets (and signer as-well)
+- owner: strategy token buyer
 
-- strategyId: strategy
+- strategyId: strategy instance id
 
-- strategyAccount: strategy data account (generated)
+- strategyAccount: strategy data
 
 - mangoProgram,
 
@@ -97,55 +82,56 @@ Addresses:
 
 - mangoVault,
 
-- vaultTokenAccount: intermidiate account for USDC, needed as Mango won't accept asstets from external addresses
+- vaultTokenAccount: intermediate USDC account, since mango does not allow direct deposit (pda)
 
-- depositTokenAccount: token acount with user's USDC
+- depositTokenAccount: USDC associated account
 
-- strategyTokenMint: strategy token mint address
+- strategyTokenMint: mint address of strategy token (pda)
 
-- strategyTokenAccount: token account to get strategy token
+- strategyTokenAccount: strategy token associated account
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
-Example call:
+Example:
 
 ```
 import { BN } from '@project-serum/anchor';
 ...
 const amount = 10_000000; // 10 USDC
-await program.rpc.deposit(bumps, new BN(amount), {
+await program.rpc.deposit(bumps, new anchor.BN(depositAmount), {
       accounts: {
-        owner: userAccount,
-        strategyId: strategyId,
-        strategyAccount, // генерируется
-        mangoProgram: MANGO_PROGRAM,
-        mangoGroup: MANGO_GROUP,
-        mangoAccount, // генерируется
-        mangoCache: MANGO_CACHE,
-        mangoRootBank: MANGO_ROOT_BANK,
-        mangoNodeBank: MANGO_NODE_BANK,
-        mangoVault: MANGO_VAULT,
-        vaultTokenAccount, // генерируется
+        owner,
+        strategyId,
+        strategyAccount,
+        mangoProgram,
+        mangoGroup,
+        mangoAccount,
+        mangoCache,
+        mangoRootBank,
+        mangoNodeBank,
+        mangoVault,
+        vaultTokenAccount,
         depositTokenAccount,
-        strategyTokenMint, // генерируется
+        strategyTokenMint,
         strategyTokenAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram,
       },
-      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: LIMITS_ACCOUNT }],
+      remainingAccounts: [{ isSigner: false, isWritable: false, pubkey: limitsAccount.publicKey }], // optional
+      signers: [owner],
 });
 ```
 
-LIMITS_ACCOUNT - optianal account with allowlist and max_tvl
+LIMITS_ACCOUNT - optional whitelist & max_tvl
 
 ### Withdraw
 
-Adresses:
+Accounts:
 
-- owner: main wallet with strategy assets (and signer as-well)
+- owner: strategy token buyer
 
-- strategyId: strategy
+- strategyId: strategy instance id
 
-- strategyAccount: strategy data account (generated)
+- strategyAccount: strategy data
 
 - mangoProgram,
 
@@ -163,19 +149,19 @@ Adresses:
 
 - mangoSigner,
 
-- spotOpenOrders, // generated
+- spotOpenOrders, // pda
 
-- withdrawTokenAccount: token account to call USDC,
+- withdrawTokenAccount: USDC associated account,
 
-- strategyTokenMint, // generated
+- strategyTokenMint, // pda
 
-- strategyTokenAccount: token account for selling strategy token,
+- strategyTokenAccount: strategy token associated account,
 
 - systemProgram: SystemProgram.programId, // import { SystemProgram } from '@solana/web3.js';
 
 - tokenProgram: TOKEN_PROGRAM_ID, // import { TOKEN_PROGRAM_ID } from '@solana/web3.js';
 
-Example call:
+Example:
 
 ```
 import { BN } from '@project-serum/anchor';
@@ -192,8 +178,8 @@ const [spotOpenOrders, _] = await PublicKey.findProgramAddress(
     MANGO_PROGRAM
 );
 
-await program.rpc.withdraw(bumps, new BN(withdrawAmount), {
-    accounts: {
+await program.rpc.withdraw(bumps, new anchor.BN(withdrawAmount), {
+      accounts: {
         owner: owner.publicKey,
         strategyId: strategyId.publicKey,
         strategyAccount,
@@ -209,8 +195,9 @@ await program.rpc.withdraw(bumps, new BN(withdrawAmount), {
         withdrawTokenAccount,
         strategyTokenMint,
         strategyTokenAccount,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-    }
+        systemProgram,
+        tokenProgram,
+      },
+      signers: [owner],
 });
 ```

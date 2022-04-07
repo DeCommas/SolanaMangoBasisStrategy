@@ -9,6 +9,7 @@ use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::Pubkey;
 use std::convert::{TryFrom, TryInto};
+use std::mem::size_of;
 use std::num::NonZeroU64;
 
 #[repr(C)]
@@ -986,7 +987,7 @@ impl MangoInstruction {
                 }
             }
             5 => {
-                let market_index = array_ref![data, 0, 8];
+                let market_index = array_ref![data, 0, size_of::<usize>()];
                 MangoInstruction::AddToBasket { market_index: usize::from_le_bytes(*market_index) }
             }
             6 => {
@@ -1064,7 +1065,7 @@ impl MangoInstruction {
                 }
             }
             15 => {
-                let data_arr = array_ref![data, 0, 8];
+                let data_arr = array_ref![data, 0, size_of::<usize>()];
                 MangoInstruction::ConsumeEvents { limit: usize::from_le_bytes(*data_arr) }
             }
             16 => MangoInstruction::CachePerpMarkets,
@@ -1089,13 +1090,13 @@ impl MangoInstruction {
             21 => MangoInstruction::UpdateRootBank,
 
             22 => {
-                let data_arr = array_ref![data, 0, 8];
+                let data_arr = array_ref![data, 0, size_of::<usize>()];
 
                 MangoInstruction::SettlePnl { market_index: usize::from_le_bytes(*data_arr) }
             }
             23 => {
-                let data = array_ref![data, 0, 16];
-                let (token_index, quantity) = array_refs![data, 8, 8];
+                let data = array_ref![data, 0, size_of::<usize>() + 8];
+                let (token_index, quantity) = array_refs![data, size_of::<usize>(), 8];
 
                 MangoInstruction::SettleBorrow {
                     token_index: usize::from_le_bytes(*token_index),
@@ -1120,9 +1121,9 @@ impl MangoInstruction {
                 }
             }
             27 => {
-                let data = array_ref![data, 0, 34];
+                let data = array_ref![data, 0, 18 + 2 * size_of::<usize>()];
                 let (asset_type, asset_index, liab_type, liab_index, max_liab_transfer) =
-                    array_refs![data, 1, 8, 1, 8, 16];
+                    array_refs![data, 1, size_of::<usize>(), 1, size_of::<usize>(), 16];
 
                 MangoInstruction::LiquidateTokenAndPerp {
                     asset_type: AssetType::try_from(u8::from_le_bytes(*asset_type)).unwrap(),
@@ -1141,8 +1142,8 @@ impl MangoInstruction {
             }
             29 => MangoInstruction::SettleFees,
             30 => {
-                let data = array_ref![data, 0, 24];
-                let (liab_index, max_liab_transfer) = array_refs![data, 8, 16];
+                let data = array_ref![data, 0, 16 + size_of::<usize>()];
+                let (liab_index, max_liab_transfer) = array_refs![data, size_of::<usize>(), 16];
 
                 MangoInstruction::ResolvePerpBankruptcy {
                     liab_index: usize::from_le_bytes(*liab_index),
